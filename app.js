@@ -52,7 +52,7 @@ function settingsSheet() {
     <button class="btn p wide mt" data-save>Enregistrer</button>
     <div class="sec"><h2>🔔 Notifications</h2></div>
     <div class="small muted">1. Installe l'appli <b>ntfy</b> (App Store / Play Store). 2. Abonne-toi au sujet ci-dessous. 3. Tu reçois les signes de ${esc(yourName())}, la question du jour à 9h, les lettres qui s'ouvrent, les défis, le check-in du dimanche.</div>
-    <label class="f">Mon sujet ntfy</label><input class="in" data-ntfy value="${esc(p.ntfy || '')}" placeholder="nous-${ME}-xxxxx">
+    <label class="f">Mon sujet ntfy</label><input class="in" data-ntfy value="${esc(p.ntfy || '')}" placeholder="nous-${ME}-…">
     <div class="row mt"><button class="btn sm" data-ntfy-save>Enregistrer le sujet</button><button class="btn sm" data-ntfy-test>Notif de test</button></div>
     <div class="sec"><h2>✨ Complice (IA)</h2></div>
     <div class="small muted">Clé API Anthropic (une seule pour vous deux, stockée dans le pont, jamais dans le téléphone). Compte sur <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>.</div>

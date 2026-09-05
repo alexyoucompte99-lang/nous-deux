@@ -29,7 +29,7 @@ let ME = localStorage.getItem('nous-me') || '';
 const YOU = () => OTHER[ME];
 const nameOf = u => (profile(u).name || USERS[u].name);
 const myName = () => nameOf(ME), yourName = () => nameOf(YOU());
-function profile(u) { return get('profile-' + u) || { id: 'profile-' + u, t: 'profile', name: USERS[u].name, birth: '', tz: '', ntfy: '' }; }
+function profile(u) { if (!USERS[u]) return { name: '', birth: '', tz: '', ntfy: '' }; return get('profile-' + u) || { id: 'profile-' + u, t: 'profile', name: USERS[u].name, birth: '', tz: '', ntfy: '' }; }
 function saveProfile(u, patch) { const p = Object.assign(profile(u), patch); put(p); return p; }
 
 // ---------- stockage ----------
