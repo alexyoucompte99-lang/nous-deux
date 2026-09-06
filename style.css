@@ -256,3 +256,21 @@ textarea.in{min-height:70px;resize:vertical}
 .who button{padding:22px 10px;border-radius:22px;background:var(--card);box-shadow:var(--shadow);font-weight:800;font-size:18px;display:flex;flex-direction:column;align-items:center;gap:8px;border:2px solid transparent}
 .who button.on{border-color:var(--acc)}
 .who .av{--s:56px}
+
+/* visite guidée */
+.tour{position:fixed;inset:0;z-index:35;display:flex;flex-direction:column;background:linear-gradient(180deg,var(--sky1),var(--sky2));color:var(--ink);animation:fade .2s}
+.tour .skip{position:absolute;top:calc(14px + env(safe-area-inset-top));right:18px;font-weight:700;color:var(--muted);z-index:2}
+.tour-body{flex:1;overflow:auto;padding:calc(40px + env(safe-area-inset-top)) 22px 20px;max-width:560px;width:100%;margin:0 auto}
+.tour-slide{animation:up .25s ease-out}
+.tour-ico{font-size:56px;line-height:1;margin-bottom:14px}
+.tour-slide h1{font-size:34px;margin-bottom:12px}
+.tour-txt{font-size:15.5px;line-height:1.5}
+.tour-txt ul,.tour-txt ol{padding-left:20px;margin:0}
+.tour-txt li{margin:8px 0}
+.tour-txt p{margin:0}
+.topic-box{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:10px 12px;margin-top:10px}
+.topic-box code{flex:1;font-size:15px;font-weight:800;word-break:break-all}
+.tour-foot{display:flex;align-items:center;justify-content:space-between;padding:12px 22px calc(18px + env(safe-area-inset-bottom));max-width:560px;width:100%;margin:0 auto}
+.dots{display:flex;gap:6px}
+.dots i{width:7px;height:7px;border-radius:50%;background:var(--soft);opacity:.5}
+.dots i.on{background:var(--acc);opacity:1;width:18px;border-radius:4px}

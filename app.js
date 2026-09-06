@@ -37,7 +37,7 @@ function renderOnboarding(root) {
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Paris';
     saveProfile(ME, { tz, birth: val(root, '[data-birth]') || profile(ME).birth });
     render(); pull(true);
-    setTimeout(() => toast('Bienvenue ' + myName() + ' 💛'), 300);
+    showTour(() => { render(); toast('Bienvenue ' + myName() + ' 💛'); });
   };
 }
 
@@ -52,14 +52,14 @@ function settingsSheet() {
     <button class="btn p wide mt" data-save>Enregistrer</button>
     <div class="sec"><h2>🔔 Notifications</h2></div>
     <div class="small muted">1. Installe l'appli <b>ntfy</b> (App Store / Play Store). 2. Abonne-toi au sujet ci-dessous. 3. Tu reçois les signes de ${esc(yourName())}, la question du jour à 9h, les lettres qui s'ouvrent, les défis, le check-in du dimanche.</div>
-    <label class="f">Mon sujet ntfy</label><input class="in" data-ntfy value="${esc(p.ntfy || '')}" placeholder="nous-${ME}-…">
+    <label class="f">Mon sujet ntfy</label><input class="in" data-ntfy value="${esc(p.ntfy || NTFY_DEFAULT[ME])}" placeholder="${NTFY_DEFAULT[ME]}">
     <div class="row mt"><button class="btn sm" data-ntfy-save>Enregistrer le sujet</button><button class="btn sm" data-ntfy-test>Notif de test</button></div>
     <div class="sec"><h2>✨ Complice (IA)</h2></div>
     <div class="small muted">Clé API Anthropic (une seule pour vous deux, stockée dans le pont, jamais dans le téléphone). Compte sur <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>.</div>
     <div class="row mt"><input class="in grow" data-key type="password" placeholder="sk-ant-…" style="margin-top:0"><button class="btn sm" data-key-save>OK</button></div>
     <div class="sec"><h2>💾 Données</h2></div>
     <div class="row wrap"><button class="btn sm" data-pull>Resynchroniser</button><button class="btn sm" data-export>Exporter</button><span class="small muted">${Object.keys(DB.items).length} éléments · ${DB.outbox.length} en attente</span></div>
-    <button class="btn sm ghost mt2" data-switch>Changer de personne sur ce téléphone</button>
+    <div class="row mt2 wrap"><button class="btn sm ghost" data-tour>Revoir la visite guidée</button><button class="btn sm ghost" data-switch>Changer de personne sur ce téléphone</button></div>
     <div class="small soft mt2">Pont : ${BRIDGE.url.startsWith('__') ? 'non configuré' : 'connecté'} · v1</div>`);
   sh.querySelector('[data-save]').onclick = () => { saveProfile(ME, { name: val(sh, '[data-name]') || USERS[ME].name, birth: val(sh, '[data-birth]'), tz: val(sh, '[data-tz]') || p.tz }); sh.close(); render(); toast('Enregistré'); };
   sh.querySelector('[data-ntfy-save]').onclick = async () => { const topic = val(sh, '[data-ntfy]'); if (!topic) return; saveProfile(ME, { ntfy: topic }); const r = await post({ what: 'setup', app_url: APP_URL, ['ntfy_' + ME]: topic }).catch(() => ({})); toast(r.ok ? 'Sujet enregistré' : 'Enregistré (pont : ' + (r.error || 'hors ligne') + ')'); };
@@ -67,6 +67,7 @@ function settingsSheet() {
   sh.querySelector('[data-key-save]').onclick = async () => { const k = val(sh, '[data-key]'); if (!k) return; const r = await post({ what: 'ai_setup', api_key: k }).catch(() => ({})); toast(r.ok ? 'Complice branché ✨' : 'Échec : ' + (r.error || '')); sh.querySelector('[data-key]').value = ''; };
   sh.querySelector('[data-pull]').onclick = () => { pull(true); toast('Synchro…'); };
   sh.querySelector('[data-export]').onclick = () => { const a = document.createElement('a'); a.href = 'data:application/json,' + encodeURIComponent(JSON.stringify(all())); a.download = 'nous-' + today() + '.json'; a.click(); };
+  sh.querySelector('[data-tour]').onclick = () => { closeSheet(); showTour(render); };
   sh.querySelector('[data-switch]').onclick = async () => { if (await confirmSheet('Changer de personne ?', 'Les données restent, seul le « qui suis-je » change.', 'Changer')) { localStorage.removeItem('nous-me'); ME = ''; closeSheet(); render(); } };
 }
 
@@ -76,6 +77,7 @@ function init() {
   document.getElementById('btn-settings').addEventListener('click', () => { if (ME) settingsSheet(); });
   render();
   pull(!DB.lastSync);
+  if (ME && !localStorage.getItem('nous-tour')) showTour(render);
   document.addEventListener('visibilitychange', () => { if (!document.hidden) { pull(); applySky(); renderClocks(); } });
   setInterval(() => { pull(); }, 30000);
   setInterval(() => { applySky(); renderClocks(); }, 60000);
