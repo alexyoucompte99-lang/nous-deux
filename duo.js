@@ -137,12 +137,12 @@ function renderCoupons(b) {
   const recv = all('coupon').filter(c => c.to === ME).sort((a, c) => (a.used - c.used) || byNewest(a, c));
   const given = all('coupon').filter(c => c.from === ME).sort((a, c) => (a.used - c.used) || byNewest(a, c));
   const cp = c => `<div class="coupon ${c.used ? 'used' : ''}"><div class="t">🎟️ ${esc(c.txt)}</div><div class="m">${c.to === ME ? 'offert par ' + esc(nameOf(c.from)) : 'pour ' + esc(nameOf(c.to))} · ${fmtDate(c.d)}${c.used ? ' · utilisé le ' + fmtDate(c.used) : ''}</div>${!c.used && c.to === ME ? `<button class="btn sm p mt" data-use="${c.id}">Je l'utilise !</button>` : ''}</div>`;
-  b.innerHTML = `<div class="muted small mt">Des bons à offrir et à encaisser à la prochaine visite. C'est toi qui les crées, l'appli ne fait que les garder au chaud.</div>
+  b.innerHTML = `<div class="muted small mt">Des bons à offrir et à encaisser à la prochaine visite : du temps, des gestes, de l'attention. Jamais d'argent. C'est toi qui les crées, l'appli ne fait que les garder au chaud.</div>
     <button class="btn p wide mt" data-new>+ Offrir un coupon à ${esc(yourName())}</button>
     <div class="sec"><h2>Mes coupons</h2><span class="small">${recv.filter(c => !c.used).length} à utiliser</span></div>${recv.length ? recv.map(cp).join('') : empty('Aucun coupon reçu pour l\'instant.', '🎟️')}
     <div class="sec"><h2>Offerts à ${esc(yourName())}</h2></div>${given.length ? given.map(cp).join('') : '<div class="muted small">Rien offert pour l\'instant.</div>'}`;
   b.querySelector('[data-new]').onclick = () => {
-    const sh = openSheet('Offrir un coupon', `<label class="f">Le coupon</label><input class="in" data-txt placeholder="Un massage, un petit-déj au lit…"><div class="muted small mt">Ou pioche :</div><div class="chips mt">${COUPONS.map(c => `<button type="button" class="chip" data-pick="${esc(c)}">${esc(c)}</button>`).join('')}</div><button class="btn p wide mt2" data-ok>Offrir 🎁</button>`);
+    const sh = openSheet('Offrir un coupon', `<label class="f">Le coupon</label><input class="in" data-txt placeholder="Un massage, un petit-déj au lit, une soirée sans téléphone…"><div class="muted small mt">Ou pioche :</div><div class="chips mt">${COUPONS.map(c => `<button type="button" class="chip" data-pick="${esc(c)}">${esc(c)}</button>`).join('')}</div><button class="btn p wide mt2" data-ok>Offrir 🎁</button>`);
     sh.querySelectorAll('[data-pick]').forEach(x => x.onclick = () => { sh.querySelector('[data-txt]').value = x.dataset.pick; });
     sh.querySelector('[data-ok]').onclick = () => { const txt = val(sh, '[data-txt]'); if (!txt) return; put({ id: uid('coupon'), t: 'coupon', txt, from: ME, to: YOU(), d: today(), used: null }); notify(YOU(), 'Un coupon pour toi 🎟️', myName() + " t'offre : " + txt, 'gift'); sh.close(); renderDuoBody(); toast('Offert 🎁'); };
   };

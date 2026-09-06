@@ -272,11 +272,13 @@ const CHECKIN = [
 /* Roue de la vie */
 const ROUE = ['Couple', 'Travail', 'Santé', 'Amis', 'Famille', 'Argent', 'Fun', 'Moi'];
 
-/* Coupons prêts à l'emploi */
+/* Coupons prêts à l'emploi : que du temps, des gestes, de l'attention. Jamais d'argent. */
 const COUPONS = [
-  "Un massage de 20 minutes", "Je choisis le film ce soir", "Petit-déjeuner au lit", "Une grasse matinée sans reproche",
-  "Un dîner cuisiné par moi", "Une journée où tu décides tout", "Un câlin de 5 minutes minimum", "Je fais la vaisselle une semaine",
-  "Une sortie surprise organisée par moi", "Un joker « on n'en parle plus »", "Un bain préparé avec bougies", "Une soirée sans téléphone",
+  "Un massage de 20 minutes", "Un massage des pieds", "Je choisis le film ce soir", "Tu choisis le film, sans négocier",
+  "Petit-déjeuner au lit", "Une grasse matinée sans reproche", "Un réveil en douceur, café apporté au lit", "Un dîner cuisiné par moi",
+  "Une journée où tu décides tout", "Un câlin de 5 minutes minimum", "Je fais la vaisselle une semaine", "Je te laisse la télécommande une semaine",
+  "Une balade surprise organisée par moi", "Un joker « on n'en parle plus »", "Un bain préparé avec bougies", "Une soirée sans téléphone",
+  "Une lecture à voix haute avant de dormir", "Une playlist faite pour toi", "Une sieste à deux sans culpabilité", "Un « oui » à une demande de ton choix",
 ];
 
 /* Souhaits partagés : catégories */
@@ -296,7 +298,7 @@ const NUMERO = {
 };
 
 /* Complice IA : cadre */
-const AI_SYSTEM = "Tu es le complice discret d'un couple à distance qui utilise une petite appli privée appelée « Nous ». Tu parles à une seule personne à la fois, jamais aux deux. Ton rôle : proposer des idées d'attentions, de surprises, de messages, de défis, de questions ou de sorties, aider à préparer les retrouvailles, aider à formuler quelque chose de délicat. Tu proposes, la personne décide et agit : c'est elle qui fait l'attention, pas toi. Tu ne culpabilises jamais, tu ne rappelles jamais ce qui n'a pas été fait, tu ne juges pas la relation, tu ne joues pas au thérapeute. Ton ton : chaleureux, léger, fun, direct, concret. Réponses courtes (3 à 8 lignes), en français, sans tirets cadratins, avec des idées précises et faisables aujourd'hui. Si on te demande des idées, donne 3 options max, du plus simple au plus ambitieux. Tu ne révèles jamais à l'autre ce que la personne t'a dit.";
+const AI_SYSTEM = "Tu es le Complice, un espace privé pour prendre du recul, dans une petite appli de couple à distance appelée « Nous ». Tu parles à une seule personne à la fois, jamais aux deux. Ton rôle : l'aider à prendre du recul sur ce qu'elle vit : une émotion, une situation, une tension, un doute, une peur, une joie aussi. Tu écoutes, tu reformules avec justesse, tu aides à nommer ce qui se passe, tu poses une seule bonne question à la fois, et tu proposes un autre angle de vue quand c'est utile. Tu ne donnes pas de listes d'idées ni de conseils de gestes à faire pour l'autre : ce n'est pas ton rôle. Tu ne juges ni la personne ni son ou sa partenaire, tu ne prends pas parti, tu ne joues pas au thérapeute, tu ne poses aucun diagnostic. Si la détresse semble sérieuse ou durable, tu encourages doucement à en parler à un proche ou à un professionnel. Ton ton : calme, chaleureux, direct, sans jargon, en français, sans tirets cadratins. Réponses courtes (3 à 8 lignes). Tu ne révèles jamais rien de ces échanges à l'autre.";
 
 /* Anglais à deux : mots et expressions (en, fr, exemple, niveau, catégorie) */
 const ENGLISH = [

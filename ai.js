@@ -1,17 +1,16 @@
 /* Nous · Complice : chat IA privé (historique local uniquement, jamais synchronisé). */
 function aiHistory() { try { return JSON.parse(localStorage.getItem('nous-ai-' + ME) || '[]'); } catch (e) { return []; } }
 function aiSave(h) { try { localStorage.setItem('nous-ai-' + ME, JSON.stringify(h.slice(-40))); } catch (e) {} }
-const AI_SUGG = ["Une idée d'attention pour aujourd'hui", "Comment lui faire une surprise à distance ?", "Idées pour nos retrouvailles", "Aide-moi à écrire un mot doux", "Un défi fun à lui proposer", "Comment aborder un sujet délicat ?", "Idée de cadeau", "On s'appelle ce soir, on fait quoi ?"];
+const AI_SUGG = ["La distance me pèse ce soir", "Je ressens un truc que je n'arrive pas à nommer", "On s'est accrochés, je tourne en rond", "Je me sens en insécurité, je veux comprendre", "J'ai un doute que je n'ose pas dire", "Je suis super heureux·se et je veux savourer", "Je me sens loin, même en appel", "J'ai réagi trop fort, je veux comprendre pourquoi"];
 function aiContext() {
   const m = nextMeet();
-  const p = profile(YOU());
-  return `Contexte : la personne qui te parle est ${myName()}. Son/sa partenaire est ${yourName()}.` + (m ? ` Prochaines retrouvailles ${fmtLong(m.d)} (dans ${daysBetween(today(), m.d)} jours)${m.place ? ' à ' + m.place : ''}.` : ' Aucune date de retrouvailles fixée pour le moment.') + (p.birth ? ` Anniversaire de ${yourName()} : ${p.birth.slice(5)} (jour-mois).` : '') + ` Nous sommes le ${fmtLong(today())}.` + (all('wish').length ? ` Souhaits notés dans l'appli : ${all('wish').filter(w => !w.done).slice(0, 8).map(w => w.txt).join(', ')}.` : '');
+    return `Contexte : la personne qui te parle est ${myName()}. Son/sa partenaire est ${yourName()}. Ils vivent une relation à distance.` + (m ? ` Prochaines retrouvailles ${fmtLong(m.d)} (dans ${daysBetween(today(), m.d)} jours)${m.place ? ' à ' + m.place : ''}.` : ' Aucune date de retrouvailles fixée pour le moment.') + ` Nous sommes le ${fmtLong(today())}.`;
 }
 function renderAI(root) {
   const hist = aiHistory();
-  root.innerHTML = `<div class="hello"><h1>Complice</h1><div class="sub">Des idées quand tu en veux. ${esc(yourName())} ne saura jamais que tu es passé·e ici.</div></div>
+  root.innerHTML = `<div class="hello"><h1>Complice</h1><div class="sub">Un espace pour prendre du recul. ${esc(yourName())} ne saura jamais que tu es passé·e ici.</div></div>
     <div class="sugg">${AI_SUGG.map(s => `<button data-s="${esc(s)}">${esc(s)}</button>`).join('')}</div>
-    <div class="chat" id="chat">${hist.length ? hist.map(m => `<div class="bubble ${m.role === 'user' ? 'me' : 'ai'}">${esc(m.content)}</div>`).join('') : `<div class="bubble ai">Salut ${esc(myName())} ✨ Je suis là pour te souffler des idées : une attention, une surprise, un mot à écrire, un truc à préparer pour les retrouvailles. C'est toi qui fais, moi je souffle. Tu veux quoi ?</div>`}</div>
+    <div class="chat" id="chat">${hist.length ? hist.map(m => `<div class="bubble ${m.role === 'user' ? 'me' : 'ai'}">${esc(m.content)}</div>`).join('') : `<div class="bubble ai">Salut ${esc(myName())}. Ici tu peux poser ce qui te traverse : une émotion, une tension, un doute, une joie. Je t'aide à prendre du recul, sans juger et sans rien décider à ta place. Par quoi tu veux commencer ?</div>`}</div>
     <div class="chat-in"><textarea data-in rows="1" placeholder="Écris ici…"></textarea><button data-send>➤</button></div>
     <div class="row mt" style="justify-content:flex-end"><button class="btn sm ghost" data-clear>Effacer la conversation</button></div>`;
   const ta = root.querySelector('[data-in]');
