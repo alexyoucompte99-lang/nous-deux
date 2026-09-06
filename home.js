@@ -128,7 +128,7 @@ function photosCard(d) {
 function addDayPhoto(file) {
   const sh = openSheet('Photo du jour', `<div class="muted small">Envoi en cours…</div><label class="f">Légende (facultatif)</label><input class="in" data-cap placeholder="Un mot, un lieu, une vibe"><button class="btn p wide mt" data-ok disabled>Publier</button>`);
   const ok = sh.querySelector('[data-ok]');
-  uploadPhoto(file).then(url => { sh.querySelector('.muted').textContent = 'Photo prête ✓'; ok.disabled = false; ok.onclick = () => { put({ id: uid('photo'), t: 'photo', kind: 'day', d: today(), by: ME, url, cap: val(sh, '[data-cap]') }); notify(YOU(), 'Photo du jour 📸', myName() + ' a posté sa photo du jour', 'camera'); sh.close(); render(); toast('Publiée'); }; }).catch(e => { sh.querySelector('.muted').textContent = 'Échec : ' + e.message; });
+  uploadPhoto(file).then(url => { sh.querySelector('.muted').textContent = 'Photo prête ✓'; ok.disabled = false; ok.onclick = () => { put({ id: uid('photo'), t: 'photo', kind: 'day', d: today(), by: ME, url, cap: val(sh, '[data-cap]') }); notify(YOU(), 'Photo du jour 📸', myName() + ' a posté sa photo du jour', 'camera'); sh.close(); render(); toast('Publiée'); }; }).catch(e => { sh.querySelector('.muted').textContent = 'Échec de l\'envoi : ' + (e.message || e) + '. Vérifie le réseau et réessaie.'; });
 }
 function viewPhoto(url, cap) { const v = h(`<div class="viewer"><button class="x">✕</button><img src="${esc(url)}" alt=""><div class="c">${esc(cap || '')}</div></div>`).firstChild; v.onclick = () => v.remove(); document.body.appendChild(v); }
 

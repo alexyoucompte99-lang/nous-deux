@@ -31,8 +31,11 @@ function renderOnboarding(root) {
     <label class="f">Ta date de naissance (pour ton nombre du jour)</label><input class="in" type="date" data-birth>
     <button class="btn p wide mt2" data-go disabled>C'est parti 💛</button></div>`;
   root.querySelectorAll('[data-who]').forEach(b => b.onclick = () => { who = b.dataset.who; root.querySelectorAll('[data-who]').forEach(x => x.classList.toggle('on', x === b)); const bi = root.querySelector('[data-birth]'); const known = profile(who).birth || USERS[who].birth; if (known) bi.value = known; root.querySelector('[data-go]').disabled = false; });
-  root.querySelector('[data-go]').onclick = () => {
+  root.querySelector('[data-go]').onclick = async () => {
     if (!who) return;
+    if (!DB.lastSync && navigator.onLine) { toast('Un instant…'); await pull(true); }
+    const pin = profile(who).pin;
+    if (pin) { const okPin = await new Promise(res => { const sh = pinSheet('Code de ' + nameOf(who), 'Ce profil est protégé par un code.', async v => { const ok = (await sha(v)) === pin; if (ok) res(true); return ok; }); const obs = new MutationObserver(() => { if (!document.body.contains(sh)) { obs.disconnect(); res(false); } }); obs.observe(document.getElementById('sheet-root'), { childList: true }); }); if (!okPin) return; }
     ME = who; localStorage.setItem('nous-me', who);
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Paris';
     saveProfile(ME, { tz, birth: val(root, '[data-birth]') || profile(ME).birth || USERS[ME].birth });
@@ -50,6 +53,9 @@ function settingsSheet() {
     <label class="f">Fuseau horaire</label><input class="in" data-tz value="${esc(p.tz || '')}" placeholder="Europe/Paris">
     <div class="small muted mt">${esc(yourName())} est en <b>${esc(o.tz || '?')}</b>${lifePath(p.birth) ? ' · ton chemin de vie : <b>' + lifePath(p.birth) + '</b>' : ''}</div>
     <button class="btn p wide mt" data-save>Enregistrer</button>
+    <div class="sec"><h2>🔒 Code de protection</h2></div>
+    <div class="small muted">Un code demandé uniquement si quelqu'un essaie d'ouvrir ton profil depuis « Changer de personne ». Jamais au lancement.</div>
+    <button class="btn sm mt" data-pin>${p.pin ? 'Changer mon code' : 'Définir un code'}</button>${p.pin ? ' <button class="btn sm ghost mt" data-pin-off>Retirer</button>' : ''}
     <div class="sec"><h2>✨ Complice (IA, prise de recul)</h2></div>
     <div class="small muted">Clé API Anthropic (une seule pour vous deux, stockée dans le pont, jamais dans le téléphone). Compte sur <a href="https://console.anthropic.com" target="_blank">console.anthropic.com</a>.</div>
     <div class="row mt"><input class="in grow" data-key type="password" placeholder="sk-ant-…" style="margin-top:0"><button class="btn sm" data-key-save>OK</button></div>
@@ -58,6 +64,9 @@ function settingsSheet() {
     <div class="row mt2 wrap"><button class="btn sm ghost" data-tour>Revoir la visite guidée</button><button class="btn sm ghost" data-switch>Changer de personne sur ce téléphone</button></div>
     <div class="small soft mt2">Pont : ${BRIDGE.url.startsWith('__') ? 'non configuré' : 'connecté'} · v1</div>`);
   sh.querySelector('[data-save]').onclick = () => { saveProfile(ME, { name: val(sh, '[data-name]') || USERS[ME].name, birth: val(sh, '[data-birth]'), tz: val(sh, '[data-tz]') || p.tz }); sh.close(); render(); toast('Enregistré'); };
+  const setPin = () => pinSheet('Nouveau code', 'Choisis un code (chiffres ou lettres). Retiens-le bien, il n\'y a pas de récupération.', async v => { if (v.length < 4) { toast('4 caractères minimum'); return false; } saveProfile(ME, { pin: await sha(v) }); toast('Code enregistré 🔒'); sh.close(); return true; });
+  sh.querySelector('[data-pin]').onclick = () => { if (p.pin) pinSheet('Code actuel', 'Entre ton code actuel.', async v => { const ok = (await sha(v)) === p.pin; if (ok) setTimeout(setPin, 250); return ok; }); else setPin(); };
+  const off = sh.querySelector('[data-pin-off]'); if (off) off.onclick = () => pinSheet('Code actuel', 'Entre ton code pour le retirer.', async v => { const ok = (await sha(v)) === p.pin; if (ok) { saveProfile(ME, { pin: '' }); toast('Code retiré'); sh.close(); } return ok; });
   sh.querySelector('[data-key-save]').onclick = async () => { const k = val(sh, '[data-key]'); if (!k) return; const r = await post({ what: 'ai_setup', api_key: k }).catch(() => ({})); toast(r.ok ? 'Complice branché ✨' : 'Échec : ' + (r.error || '')); sh.querySelector('[data-key]').value = ''; };
   sh.querySelector('[data-pull]').onclick = () => { pull(true); toast('Synchro…'); };
   sh.querySelector('[data-export]').onclick = () => { const a = document.createElement('a'); a.href = 'data:application/json,' + encodeURIComponent(JSON.stringify(all())); a.download = 'nous-' + today() + '.json'; a.click(); };

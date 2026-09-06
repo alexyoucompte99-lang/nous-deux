@@ -82,7 +82,9 @@ async function pull(full) {
   pulling = false;
 }
 async function post(payload) {
-  const r = await fetch(BRIDGE.url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(Object.assign({ key: BRIDGE.key }, payload)), keepalive: true });
+  const body = JSON.stringify(Object.assign({ key: BRIDGE.key }, payload));
+  // keepalive est limité à 64 Ko par les navigateurs : on ne l'active que pour les petits envois
+  const r = await fetch(BRIDGE.url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body, keepalive: body.length < 60000 });
   return r.json();
 }
 /* notif ntfy vers l'autre (ou 'both'). Désactivé pour l'instant (NOTIFS_ON) : on verra plus tard la meilleure solution. */
@@ -103,16 +105,33 @@ function compressImage(file, max) {
     img.onerror = rej; img.src = url;
   });
 }
+function fileToBase64(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(file); }); }
 async function uploadPhoto(file, name) {
-  const data = await compressImage(file);
-  const r = await post({ what: 'photo', name: name || ('photo-' + Date.now() + '.jpg'), data, mime: 'image/jpeg' });
+  let data, mime = 'image/jpeg';
+  try { data = await compressImage(file); }
+  catch (e) { data = await fileToBase64(file); mime = file.type || 'image/jpeg'; } // HEIC ou format non décodable : on envoie tel quel, Drive le convertit à l'affichage
+  if (!data) throw new Error('lecture impossible');
+  const r = await post({ what: 'photo', name: name || ('photo-' + Date.now() + (mime === 'image/jpeg' ? '.jpg' : '')), data, mime });
   if (!r.ok) throw new Error(r.error || 'upload');
   return r.url;
 }
 function pickPhoto(cb, capture) {
-  const inp = document.createElement('input'); inp.type = 'file'; inp.accept = 'image/*'; if (capture) inp.capture = 'environment';
-  inp.onchange = () => { if (inp.files[0]) cb(inp.files[0]); };
+  let inp = document.getElementById('nous-file');
+  if (inp) inp.remove();
+  inp = document.createElement('input'); inp.type = 'file'; inp.id = 'nous-file'; inp.accept = 'image/*'; if (capture) inp.capture = 'environment';
+  inp.style.cssText = 'position:fixed;left:-9999px;top:0;opacity:0';
+  document.body.appendChild(inp);
+  inp.addEventListener('change', () => { const f = inp.files && inp.files[0]; setTimeout(() => inp.remove(), 500); if (f) cb(f); });
   inp.click();
+}
+async function sha(s) { const b = new TextEncoder().encode('nous·' + s); const d = await crypto.subtle.digest('SHA-256', b); return [...new Uint8Array(d)].map(x => x.toString(16).padStart(2, '0')).join(''); }
+function pinSheet(title, text, onOk) {
+  const sh = openSheet(title, `<p>${text}</p><input class="in mt" type="password" inputmode="numeric" pattern="[0-9]*" data-pin placeholder="Code" autocomplete="off"><button class="btn p wide mt" data-ok>Valider</button>`);
+  const go = async () => { const v = val(sh, '[data-pin]'); if (!v) return; const ok = await onOk(v); if (ok) sh.close(); else { toast('Code incorrect'); sh.querySelector('[data-pin]').value = ''; } };
+  sh.querySelector('[data-ok]').onclick = go;
+  sh.querySelector('[data-pin]').onkeydown = e => { if (e.key === 'Enter') go(); };
+  setTimeout(() => sh.querySelector('[data-pin]').focus(), 200);
+  return sh;
 }
 
 // ---------- ciel / heure locale ----------

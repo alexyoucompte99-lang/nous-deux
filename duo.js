@@ -74,15 +74,20 @@ function renderSwipe(b) {
   const todo = shuffle(cards.filter(c => !swipeOf(c.id, ME)), dayIndex() + 11);
   const matches = cards.filter(c => { const a = swipeOf(c.id, 'alex'), m = swipeOf(c.id, 'manon'); return a && m && a.yes && m.yes; });
   const waiting = cards.filter(c => { const me = swipeOf(c.id, ME), you = swipeOf(c.id, YOU()); return me && me.yes && !you; }).length;
-  b.innerHTML = `<div class="muted small mt">Swipe à droite si ça te tente. Les matchs n'apparaissent que si vous avez dit oui tous les deux, sans savoir ce que l'autre a swipé.</div>
+  const LIKES_MAX = 2;
+  const likesToday = mine('swipe').filter(x => x.yes && x.d === today()).length;
+  const likesLeft = Math.max(0, LIKES_MAX - likesToday);
+  b.innerHTML = `<div class="muted small mt">Swipe à droite si ça te tente, 2 oui par jour maximum. Les matchs n'apparaissent que si vous avez dit oui tous les deux, sans savoir ce que l'autre a swipé.</div>
     ${todo.length ? `<div class="deck">${todo.slice(0, 3).reverse().map((c, i) => `<div class="sw" data-id="${c.id}" style="transform:scale(${1 - (2 - i) * 0.04}) translateY(${(2 - i) * -8}px);z-index:${i}"><span class="stamp yes">OUI</span><span class="stamp no">NON</span><div class="cat">${esc(c.c)}${c.by ? ' · idée de ' + esc(nameOf(c.by)) : ''}</div><div class="t">${esc(c.t)}</div></div>`).join('')}</div>
-    <div class="sw-btns"><button data-no>👎</button><button data-yes>❤️</button></div><div class="center muted small mt">${todo.length} carte${todo.length > 1 ? 's' : ''} restante${todo.length > 1 ? 's' : ''}${waiting ? ' · ' + waiting + ' oui en attente de ' + esc(yourName()) : ''}</div>` : `<div class="card center"><div style="font-size:34px">🎉</div><div style="font-weight:800">Tu as tout swipé</div><div class="muted small">Ajoute tes propres envies, ${esc(yourName())} devra swiper dessus.</div></div>`}
+    <div class="sw-btns"><button data-no>👎</button><button data-yes ${likesLeft ? '' : 'disabled style="opacity:.4"'}>❤️</button></div><div class="center muted small mt">${likesLeft ? likesLeft + ' oui restant' + (likesLeft > 1 ? 's' : '') + " aujourd'hui" : 'Plus de oui pour aujourd\'hui, reviens demain 😉'} · ${todo.length} carte${todo.length > 1 ? 's' : ''}${waiting ? ' · ' + waiting + ' oui en attente de ' + esc(yourName()) : ''}</div>` : `<div class="card center"><div style="font-size:34px">🎉</div><div style="font-weight:800">Tu as tout swipé</div><div class="muted small">Ajoute tes propres envies, ${esc(yourName())} devra swiper dessus.</div></div>`}
     <div class="row mt2"><button class="btn wide" data-add-envie>+ Ajouter une envie</button></div>
     <div class="sec"><h2>Vos matchs</h2><span class="small">${matches.length}</span></div>
     <div class="card" style="padding:6px 16px">${matches.length ? matches.map(c => `<div class="match"><span style="font-size:20px">💞</span><div class="grow"><div class="t">${esc(c.t)}</div><div class="small muted">${esc(c.c)}</div></div><button class="btn sm" data-towish="${esc(c.t)}" data-cat="${esc(c.c)}">→ Souhaits</button></div>`).join('') : '<div class="muted small" style="padding:8px 0">Pas encore de match. Continuez à swiper 😉</div>'}</div>`;
   const top = () => b.querySelector('.deck .sw:last-child');
   const decide = yes => {
-    const card = top(); if (!card) return; haptic();
+    const card = top(); if (!card) return;
+    if (yes && !likesLeft) { toast('2 oui par jour max, garde-les pour les vraies envies 😉'); card.style.transform = ''; card.querySelectorAll('.stamp').forEach(s => s.style.opacity = 0); return; }
+    haptic();
     const id = card.dataset.id;
     put({ id: 'swipe-' + id + '-' + ME, t: 'swipe', card: id, by: ME, yes, d: today() });
     card.classList.add(yes ? 'out-r' : 'out-l');

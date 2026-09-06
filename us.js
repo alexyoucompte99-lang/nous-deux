@@ -1,5 +1,5 @@
 /* Nous · Nous : check-in hebdo, journal d'humeur, lettres différées, capsules temporelles */
-const US_TABS = [{ v: 'checkin', l: '🗓️ Check-in' }, { v: 'mood', l: '🌤️ Humeur' }, { v: 'letters', l: '💌 Lettres' }, { v: 'capsules', l: '⏳ Capsules' }];
+const US_TABS = [{ v: 'checkin', l: '🗓️ Check-in' }, { v: 'mood', l: '🌤️ Humeur' }, { v: 'letters', l: '💌 Lettres' }, { v: 'capsules', l: '⏳ Capsules' }, { v: 'ideas', l: '💡 Idées' }];
 function renderUs(root) {
   VIEW.us = VIEW.us || 'checkin';
   root.innerHTML = `<div class="hello"><h1>Nous</h1></div><div class="chips scroll mt" data-seg="us">${US_TABS.map(t => `<button type="button" class="chip ${t.v === VIEW.us ? 'on' : ''}" data-v="${t.v}">${t.l}</button>`).join('')}</div><div id="us-body"></div>`;
@@ -7,7 +7,7 @@ function renderUs(root) {
   root.querySelector('[data-seg=us]').addEventListener('change', () => { VIEW.us = segVal(root, 'us'); renderUsBody(); });
   renderUsBody();
 }
-function renderUsBody() { const b = document.getElementById('us-body'); if (!b) return; ({ checkin: renderCheckin, mood: renderMood, letters: renderLetters, capsules: renderCapsules })[VIEW.us](b); }
+function renderUsBody() { const b = document.getElementById('us-body'); if (!b) return; ({ checkin: renderCheckin, mood: renderMood, letters: renderLetters, capsules: renderCapsules, ideas: renderIdeas })[VIEW.us](b); }
 
 // ---------- check-in hebdo ----------
 function renderCheckin(b) {
@@ -114,4 +114,16 @@ function capsuleSheet(id) {
   const ph = sh.querySelector('[data-photo]'); if (ph) ph.onclick = () => pickPhoto(async f => { sh.querySelector('[data-pstat]').textContent = 'Envoi…'; try { url = await uploadPhoto(f); sh.querySelector('[data-pstat]').textContent = 'Photo ✓'; } catch (e) { sh.querySelector('[data-pstat]').textContent = 'Échec'; } });
   const add = sh.querySelector('[data-add]'); if (add) add.onclick = () => { const txt = val(sh, '[data-txt]'); if (!txt && !url) return toast('Un mot ou une photo'); put({ id: uid('capItem'), t: 'capItem', capsule: id, by: ME, txt, url, d }); notify(YOU(), 'Capsule ⏳', myName() + ' a glissé un souvenir dans « ' + c.title + ' »', 'hourglass'); toast('Scellé ✓'); capsuleSheet(id); renderUsBody(); };
   const del = sh.querySelector('[data-del]'); if (del) del.onclick = () => { remove(id); sh.close(); renderUsBody(); };
+}
+
+// ---------- boîte à idées ----------
+function renderIdeas(b) {
+  const list = all('idea').sort((a, c) => (a.done - c.done) || byNewest(a, c));
+  b.innerHTML = `<div class="muted small mt">Une idée pour l'appli, une envie de fonctionnalité, un truc qui bug, ou une idée pour nous deux. Chacun peut en poser, chacun peut cocher.</div>
+    <div class="card"><textarea class="in" data-txt placeholder="Mon idée…"></textarea><div class="row mt">${chipsHtml('icat', [{ v: 'Appli', l: '📱 Appli' }, { v: 'Nous', l: '💞 Nous deux' }, { v: 'Bug', l: '🐛 Bug' }], 'Appli')}<button class="btn p" data-add>Ajouter</button></div></div>
+    <div class="card" style="padding:6px 16px">${list.length ? list.map(i => `<div class="li ${i.done ? 'done' : ''}"><button class="cb" data-tg="${i.id}">${i.done ? '✓' : ''}</button><div class="grow"><div class="t">${nl(i.txt)}</div><div class="m">${esc(i.cat || 'Appli')} · ${esc(nameOf(i.by))} · ${fmtDate(i.d)}</div></div>${i.by === ME ? `<button class="soft" data-rm="${i.id}">✕</button>` : ''}</div>`).join('') : '<div class="muted small" style="padding:8px 0">La boîte est vide. La première idée est pour toi.</div>'}</div>`;
+  wireSegs(b);
+  b.querySelector('[data-add]').onclick = () => { const txt = val(b, '[data-txt]'); if (!txt) return; put({ id: uid('idea'), t: 'idea', txt, cat: segVal(b, 'icat') || 'Appli', by: ME, d: today(), done: false }); notify(YOU(), 'Boîte à idées 💡', myName() + ' : ' + txt, 'bulb'); toast('Dans la boîte 💡'); renderUsBody(); };
+  b.querySelectorAll('[data-tg]').forEach(x => x.onclick = () => { const i = get(x.dataset.tg); i.done = !i.done; put(i); renderUsBody(); });
+  b.querySelectorAll('[data-rm]').forEach(x => x.onclick = () => { remove(x.dataset.rm); renderUsBody(); });
 }
