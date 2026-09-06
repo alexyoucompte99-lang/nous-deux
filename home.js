@@ -51,7 +51,7 @@ function pulseCard() {
   const pings = theirs('ping').sort(byNewest);
   const last = pings[0];
   const todayN = mine('ping').filter(p => p.d === today()).length;
-  return `<button class="pulse-btn" data-pulse><div class="heart">💛</div><div class="grow"><div class="t">Je pense à toi</div><div class="s">${last ? esc(yourName()) + ' a pensé à toi ' + ago(last.u) : 'Une touche, et ' + esc(yourName()) + ' reçoit un petit signe.'}${todayN ? ' · ' + todayN + ' envoyé' + (todayN > 1 ? 's' : '') + " aujourd'hui" : ''}</div></div><div style="font-size:22px">›</div></button>`;
+  return `<button class="pulse-btn" data-pulse><div class="heart">💛</div><div class="grow"><div class="t">Je pense à toi</div><div class="s">${last ? esc(yourName()) + ' a pensé à toi ' + ago(last.u) : 'Une touche, et ' + esc(yourName()) + ' voit un petit signe de toi.'}${todayN ? ' · ' + todayN + ' envoyé' + (todayN > 1 ? 's' : '') + " aujourd'hui" : ''}</div></div><div style="font-size:22px">›</div></button>`;
 }
 const PING_MSGS = ['pense à toi 💛', 'pense à toi, là, maintenant 💛', 't\'envoie un petit signe 💛', 'a une pensée pour toi ✨', 'pense fort à toi 💛'];
 function sendPulse(btn) {

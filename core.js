@@ -85,8 +85,9 @@ async function post(payload) {
   const r = await fetch(BRIDGE.url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body: JSON.stringify(Object.assign({ key: BRIDGE.key }, payload)), keepalive: true });
   return r.json();
 }
-/* notif ntfy vers l'autre (ou 'both'). Le pont connaît les sujets. */
-function notify(to, title, msg, tags) { if (BRIDGE.url.startsWith('__')) return; post({ what: 'notify', to: to || YOU(), title, msg, tags: tags || '' }).catch(() => {}); }
+/* notif ntfy vers l'autre (ou 'both'). Désactivé pour l'instant (NOTIFS_ON) : on verra plus tard la meilleure solution. */
+const NOTIFS_ON = false;
+function notify(to, title, msg, tags) { if (!NOTIFS_ON || BRIDGE.url.startsWith('__')) return; post({ what: 'notify', to: to || YOU(), title, msg, tags: tags || '' }).catch(() => {}); }
 
 // ---------- photos ----------
 function compressImage(file, max) {

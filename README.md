@@ -10,7 +10,7 @@ Appli privée d'Alex et Manon pour la distance : question du jour, « je pense �
 ## Mise en route (une fois)
 
 1. **Autoriser le pont** : ouvrir le script (lien ci-dessus), choisir la fonction `autoriser` en haut, **Exécuter**, accepter les accès (Sheets, Drive, réseau, déclencheurs). Ça crée le Sheet et installe les rappels (question du jour 9h, lettres/capsules qui s'ouvrent, défi du lundi 9h30, check-in du dimanche 19h). Tant que ce n'est pas fait, l'appli marche en local mais ne synchronise pas (point rouge en haut à droite).
-2. **Notifs** : chacun installe l'appli **ntfy** et s'abonne à son sujet, puis le colle dans ⚙︎ → « Mon sujet ntfy » → Enregistrer. Sujets proposés : Alex `nous-alex-9dafeb`, Manon `nous-manon-e89df3`.
+2. **Notifs** : désactivées pour l'instant (`NOTIFS_ON = false` dans core.js). Le pont garde ntfy en réserve (sujets enregistrés, rappels installés) ; à réactiver plus tard, ou remplacer par du Web Push via OneSignal.
 3. **Complice** : ⚙︎ → coller une clé API Anthropic (console.anthropic.com). Une seule clé pour les deux, stockée dans le pont.
 4. **Dates de naissance** : au premier lancement ou dans ⚙︎, pour le nombre du jour.
 
