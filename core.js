@@ -1,5 +1,5 @@
 /* Nous · noyau : identité, stockage local + synchro Sheet (pont Apps Script), helpers UI, ciel. */
-const BRIDGE = { url: 'https://script.google.com/macros/s/AKfycbw6jlFaJuGaaM8tZCpn52L9VI-2V-vFnv56f2fXO34mvRuvRuZKgXcygXmvt8f2dhTT/exec', key: 'nous-3e7a91c4d2f85b60' };
+const BRIDGE = { url: 'https://script.google.com/macros/s/AKfycbwQeV-BDd8tDTFEvPtW8xD_EBqWaqCROel6d7iEPMPH26w1Ks1QNI2eswRRZJajqItN/exec', key: 'nous-3e7a91c4d2f85b60' };
 const APP_URL = 'https://alexyoucompte99-lang.github.io/nous-deux/';
 
 // ---------- dates ----------

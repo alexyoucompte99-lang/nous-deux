@@ -22,6 +22,7 @@ function doGet(e) {
   const q = (e && e.parameter) || {};
   if (q.key !== KEY) return out({ ok: true, pong: true, v: 1 });
   if (q.what === 'all') return out(all_(Number(q.since || 0)));
+  if (q.what === 'diag') return out({ ok: true, ntfy_err: P.getProperty('LAST_NTFY_ERR') || null, ai: !!P.getProperty('ANTHROPIC_KEY'), topics: [!!P.getProperty('NTFY_ALEX'), !!P.getProperty('NTFY_MANON')] });
   return out({ ok: true, pong: true, v: 1 });
 }
 
@@ -145,7 +146,15 @@ function ntfy_(topic, msg, title, tags, prio) {
   if (tags) headers['Tags'] = tags;
   const app = P.getProperty('APP_URL');
   if (app) headers['Click'] = app;
-  try { UrlFetchApp.fetch('https://ntfy.sh/' + topic, { method: 'post', payload: msg, headers, muteHttpExceptions: true }); return true; } catch (e) { return false; }
+  for (let i = 0; i < 3; i++) {
+    try {
+      const r = UrlFetchApp.fetch('https://ntfy.sh/' + topic, { method: 'post', payload: msg, headers, muteHttpExceptions: true });
+      if (r.getResponseCode() < 300) return true;
+      P.setProperty('LAST_NTFY_ERR', r.getResponseCode() + ' ' + r.getContentText().slice(0, 200));
+    } catch (e) { P.setProperty('LAST_NTFY_ERR', String(e && e.message || e)); }
+    Utilities.sleep(400);
+  }
+  return false;
 }
 function notifyTo_(to, title, msg, tags, prio) {
   const list = to === 'both' ? ['alex', 'manon'] : [to];
