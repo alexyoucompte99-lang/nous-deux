@@ -1,5 +1,5 @@
 /* Nous · Jeux : quiz, défi de la semaine, devine ma réponse, roue de la vie, ligne de vie */
-const GAME_TABS = [{ v: 'quiz', l: '🧠 Quiz' }, { v: 'defi', l: '🏁 Défi' }, { v: 'guess', l: '🎯 Devine' }, { v: 'wheel', l: '🎡 Roue' }, { v: 'life', l: '📖 Ligne de vie' }];
+const GAME_TABS = [{ v: 'english', l: '🇬🇧 Anglais' }, { v: 'quiz', l: '🧠 Quiz' }, { v: 'defi', l: '🏁 Défi' }, { v: 'guess', l: '🎯 Devine' }, { v: 'wheel', l: '🎡 Roue' }, { v: 'life', l: '📖 Ligne de vie' }];
 function renderGames(root) {
   VIEW.game = VIEW.game || 'quiz';
   root.innerHTML = `<div class="hello"><h1>Jeux</h1></div><div class="chips scroll mt" data-seg="game">${GAME_TABS.map(t => `<button type="button" class="chip ${t.v === VIEW.game ? 'on' : ''}" data-v="${t.v}">${t.l}</button>`).join('')}</div><div id="game-body"></div>`;
@@ -7,7 +7,7 @@ function renderGames(root) {
   root.querySelector('[data-seg=game]').addEventListener('change', () => { VIEW.game = segVal(root, 'game'); renderGameBody(); });
   renderGameBody();
 }
-function renderGameBody() { const b = document.getElementById('game-body'); if (!b) return; ({ quiz: renderQuiz, defi: renderDefi, guess: renderGuess, wheel: renderWheel, life: renderLife })[VIEW.game](b); }
+function renderGameBody() { const b = document.getElementById('game-body'); if (!b) return; ({ english: renderEnglish, quiz: renderQuiz, defi: renderDefi, guess: renderGuess, wheel: renderWheel, life: renderLife })[VIEW.game](b); }
 
 // ---------- quiz hebdo ----------
 function quizQs(wk) { const seed = dayIndex(wk); return shuffle(QUIZ.map((q, i) => i), seed + 3).slice(0, 5); }

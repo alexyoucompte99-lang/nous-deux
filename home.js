@@ -9,6 +9,7 @@ function renderHome(root) {
   html += countdownCard();
   html += pulseCard();
   html += questionCard(d);
+  html += quoteCard(d);
   html += photosCard(d);
   html += numeroCard(d);
   html += memoryCard();
@@ -93,6 +94,31 @@ function questionHistory() {
   openSheet('Vos réponses', keys.length ? keys.map(k => `<div class="card"><div class="small muted">${fmtLong(k)}</div><div class="q serif" style="font-size:16px;margin:4px 0 6px">${esc(dayQuestion(k))}</div>${['alex', 'manon'].map(u => days[k][u] ? `<div class="answer"><div class="who">${avatar(u, 18)} ${esc(nameOf(u))}</div>${nl(days[k][u])}</div>` : '').join('')}</div>`).join('') : empty('Vos premières réponses apparaîtront ici.', '💬'));
 }
 
+// ---------- citation du jour ----------
+function dayQuote(d) { return pick(shuffle(QUOTES, 3), dayIndex(d)); }
+function quoteCard(d) {
+  const q = dayQuote(d);
+  const th = all('quoteR').filter(r => r.d === d).sort((a, b) => a.u - b.u);
+  return `<div class="card"><div class="card-h"><h2>🪶 Citation du jour</h2><button class="btn sm ghost" data-qthist>Historique</button></div>
+    <div class="quote">« ${esc(q.q)} »</div><div class="quote-a">${esc(q.a)}</div>
+    <div class="quote-p">${esc(q.p)}</div>
+    ${th.map(r => `<div class="answer"><div class="who">${avatar(r.by, 18)} ${esc(nameOf(r.by))}</div>${nl(r.txt)}</div>`).join('')}
+    <div class="row mt"><input class="in grow" data-qr placeholder="Ta réflexion, si tu veux…" style="margin-top:0"><button class="btn" data-qrsend>➤</button></div>
+    <div class="tiny muted mt">Aucune obligation. Juste un point de départ pour échanger.</div></div>`;
+}
+function sendQuoteReply(root) {
+  const txt = val(root, '[data-qr]'); if (!txt) return;
+  const d = today();
+  put({ id: uid('quoteR'), t: 'quoteR', d, by: ME, txt });
+  notify(YOU(), 'Citation du jour 🪶', myName() + ' : ' + txt, 'feather');
+  render();
+}
+function quoteHistory() {
+  const days = {}; all('quoteR').forEach(r => { if (r.d === today()) return; days[r.d] = days[r.d] || []; days[r.d].push(r); });
+  const keys = Object.keys(days).sort().reverse();
+  openSheet('Vos échanges', keys.length ? keys.map(k => { const q = dayQuote(k); return `<div class="card"><div class="small muted">${fmtLong(k)}</div><div class="quote" style="font-size:16px;margin-top:4px">« ${esc(q.q)} »</div><div class="quote-a">${esc(q.a)}</div>${days[k].sort((a, b) => a.u - b.u).map(r => `<div class="answer"><div class="who">${avatar(r.by, 18)} ${esc(nameOf(r.by))}</div>${nl(r.txt)}</div>`).join('')}</div>`; }).join('') : empty('Vos premiers échanges apparaîtront ici.', '🪶'));
+}
+
 // ---------- photo du jour ----------
 function dayPhoto(d, u) { return all('photo').filter(p => p.kind === 'day' && p.d === d && p.by === u).sort(byNewest)[0]; }
 function photosCard(d) {
@@ -144,6 +170,9 @@ function wireHome(root) {
   root.querySelector('[data-pulse]').onclick = e => sendPulse(e.currentTarget);
   const qs = root.querySelector('[data-qsend]'); if (qs) qs.onclick = () => answerQuestion(root);
   root.querySelector('[data-qhist]').onclick = questionHistory;
+  root.querySelector('[data-qthist]').onclick = quoteHistory;
+  root.querySelector('[data-qrsend]').onclick = () => sendQuoteReply(root);
+  root.querySelector('[data-qr]').onkeydown = e => { if (e.key === 'Enter') sendQuoteReply(root); };
   root.querySelectorAll('[data-photo-slot]').forEach(s => s.onclick = () => { if (s.dataset.url) viewPhoto(s.dataset.url); else if (s.dataset.photoSlot === ME) pickPhoto(addDayPhoto); });
   root.querySelector('[data-gallery]').onclick = () => { VIEW.tab = 'duo'; VIEW.duo = 'photos'; render(); scrollTop(); };
   root.querySelectorAll('[data-settings]').forEach(c => c.onclick = settingsSheet);

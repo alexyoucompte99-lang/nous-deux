@@ -1,6 +1,6 @@
 # Nous
 
-Appli privée d'Alex et Manon pour la distance : question du jour, « je pense à toi », photo du jour, compte à rebours, soirée ciné synchronisée, swipe d'envies, souhaits, coupons, quiz « qui connaît le mieux l'autre », défi de la semaine, devine ma réponse, roue de la vie, ligne de vie, check-in hebdo, journal d'humeur, lettres différées, capsules temporelles, souvenirs, nombre numérologique du jour, Complice (chat IA privé).
+Appli privée d'Alex et Manon pour la distance : question du jour, « je pense à toi », photo du jour, compte à rebours, soirée ciné synchronisée, swipe d'envies, souhaits, coupons, quiz « qui connaît le mieux l'autre », défi de la semaine, devine ma réponse, roue de la vie, ligne de vie, anglais à deux (mot du jour, phrase, quiz express, XP), citation philosophique du jour avec fil d'échange, check-in hebdo, journal d'humeur, lettres différées, capsules temporelles, souvenirs, nombre numérologique du jour, Complice (chat IA privé).
 
 - **Appli** : https://alexyoucompte99-lang.github.io/nous-deux/ (PWA : Safari → Partager → « Sur l'écran d'accueil »). Chacun choisit « Alex » ou « Manon » au premier lancement.
 - **Données** : Google Sheet « Nous · données » (créé par le pont), onglet `Items`. Copie locale dans chaque téléphone, synchro toutes les 30 s et à chaque changement. Photos dans le dossier Drive « Nous ».
