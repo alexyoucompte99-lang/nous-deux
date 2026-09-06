@@ -30,12 +30,12 @@ function renderOnboarding(root) {
     <div class="who">${['alex', 'manon'].map(u => `<button data-who="${u}">${avatar(u, 56)}<span>${USERS[u].name}</span></button>`).join('')}</div>
     <label class="f">Ta date de naissance (pour ton nombre du jour)</label><input class="in" type="date" data-birth>
     <button class="btn p wide mt2" data-go disabled>C'est parti 💛</button></div>`;
-  root.querySelectorAll('[data-who]').forEach(b => b.onclick = () => { who = b.dataset.who; root.querySelectorAll('[data-who]').forEach(x => x.classList.toggle('on', x === b)); root.querySelector('[data-go]').disabled = false; });
+  root.querySelectorAll('[data-who]').forEach(b => b.onclick = () => { who = b.dataset.who; root.querySelectorAll('[data-who]').forEach(x => x.classList.toggle('on', x === b)); const bi = root.querySelector('[data-birth]'); const known = profile(who).birth || USERS[who].birth; if (known) bi.value = known; root.querySelector('[data-go]').disabled = false; });
   root.querySelector('[data-go]').onclick = () => {
     if (!who) return;
     ME = who; localStorage.setItem('nous-me', who);
     const tz = Intl.DateTimeFormat().resolvedOptions().timeZone || 'Europe/Paris';
-    saveProfile(ME, { tz, birth: val(root, '[data-birth]') || profile(ME).birth });
+    saveProfile(ME, { tz, birth: val(root, '[data-birth]') || profile(ME).birth || USERS[ME].birth });
     render(); pull(true);
     showTour(() => { render(); toast('Bienvenue ' + myName() + ' 💛'); });
   };

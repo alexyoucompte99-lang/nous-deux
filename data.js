@@ -1,5 +1,5 @@
 /* Nous · banques de contenu (partagées entre l'appli et le pont Apps Script). */
-const USERS = { alex: { name: 'Alex', emoji: '🧑', color: '#5b7cfa' }, manon: { name: 'Manon', emoji: '👩', color: '#f06292' } };
+const USERS = { alex: { name: 'Alex', emoji: '🧑', color: '#5b7cfa', birth: '' }, manon: { name: 'Manon', emoji: '👩', color: '#f06292', birth: '2001-11-14' } };
 const OTHER = { alex: 'manon', manon: 'alex' };
 
 /* Question du jour : légères, drôles, profondes, rêves, histoire. Index = jour depuis le 1er janv. 2026 modulo N. */
