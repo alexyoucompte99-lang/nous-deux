@@ -1,4 +1,4 @@
-/* Nous · noyau : identité, stockage local + synchro Sheet (pont Apps Script), helpers UI, ciel. */
+/* Nous · noyau : identité, stockage local + synchro Sheet (pont Apps Script), photos, notifications, helpers UI, ciel. */
 const BRIDGE = { url: 'https://script.google.com/macros/s/AKfycbwQeV-BDd8tDTFEvPtW8xD_EBqWaqCROel6d7iEPMPH26w1Ks1QNI2eswRRZJajqItN/exec', key: 'nous-3e7a91c4d2f85b60' };
 const APP_URL = 'https://alexyoucompte99-lang.github.io/nous-deux/';
 
@@ -33,8 +33,9 @@ function profile(u) { if (!USERS[u]) return { name: '', birth: '', tz: '', ntfy:
 function saveProfile(u, patch) { const p = Object.assign(profile(u), patch); put(p); return p; }
 
 // ---------- stockage ----------
-const DB = { items: {}, lastSync: 0, outbox: [] };
-function loadDB() { try { const s = JSON.parse(localStorage.getItem('nous-db') || 'null'); if (s) Object.assign(DB, s); } catch (e) {} }
+// notes = notifs en attente d'envoi : elles partent avec la synchro (même requête que les données, réessayées tant qu'elles n'ont pas abouti).
+const DB = { items: {}, lastSync: 0, outbox: [], notes: [] };
+function loadDB() { try { const s = JSON.parse(localStorage.getItem('nous-db') || 'null'); if (s) Object.assign(DB, s); } catch (e) {} if (!Array.isArray(DB.notes)) DB.notes = []; }
 function saveDB() { try { localStorage.setItem('nous-db', JSON.stringify(DB)); } catch (e) {} }
 function all(type) { const r = []; for (const k in DB.items) { const o = DB.items[k]; if (!o.del && (!type || o.t === type)) r.push(o); } return r; }
 function get(id) { const o = DB.items[id]; return o && !o.del ? o : null; }
@@ -46,74 +47,218 @@ const byNewest = (a, b) => (b.u || 0) - (a.u || 0);
 const byDate = (a, b) => (a.d || '').localeCompare(b.d || '');
 
 // ---------- synchro ----------
-let flushTimer = null, syncing = false;
+const sleep = ms => new Promise(r => setTimeout(r, ms));
+let flushTimer = null, syncing = false, flushFails = 0;
 function setSync(state) { const e = document.getElementById('sync'); if (e) e.className = 'sync ' + state; }
-function flushSoon() { clearTimeout(flushTimer); flushTimer = setTimeout(flush, 500); }
+function flushSoon(ms) { clearTimeout(flushTimer); flushTimer = setTimeout(flush, ms == null ? 400 : ms); }
 async function flush() {
-  if (!DB.outbox.length || syncing || !navigator.onLine) return;
+  if ((!DB.outbox.length && !DB.notes.length) || syncing || !navigator.onLine || BRIDGE.url.startsWith('__')) return;
   syncing = true; setSync('busy');
-  const ids = DB.outbox.slice(0, 40);
-  const items = ids.map(id => DB.items[id]).filter(Boolean);
+  const items = DB.outbox.slice(0, 40).map(id => DB.items[id]).filter(Boolean);
+  const sent = {}; items.forEach(o => { sent[o.id] = o.u; });
+  DB.notes = DB.notes.filter(n => Date.now() - (n.at || 0) < 12 * 3600e3); // une notif restée bloquée plus de 12 h n'a plus de sens
+  const notes = DB.notes.slice(0, 10);
+  let ok = false;
   try {
-    const r = await post({ what: 'upsert', items });
-    if (r && r.ok) { DB.outbox = DB.outbox.filter(id => !ids.includes(id)); saveDB(); setSync('ok'); }
-    else setSync('err');
+    const r = await post({ what: 'upsert', items, notes });
+    if (r.ok) {
+      ok = true;
+      // un élément modifié pendant l'envoi reste dans la file (sa nouvelle version n'est pas encore partie)
+      DB.outbox = DB.outbox.filter(id => !(id in sent) || (DB.items[id] && DB.items[id].u !== sent[id]));
+      const nids = notes.map(n => n.nid); DB.notes = DB.notes.filter(n => !nids.includes(n.nid));
+      let changed = 0;
+      (r.newer || []).forEach(o => { const loc = DB.items[o.id]; if (!loc || (o.u || 0) > (loc.u || 0)) { DB.items[o.id] = o; changed++; } });
+      saveDB(); setSync('ok');
+      if (changed) { render(); document.dispatchEvent(new CustomEvent('nous:changed')); }
+    } else setSync('err');
   } catch (e) { setSync('err'); }
   syncing = false;
-  if (DB.outbox.length) flushSoon();
+  flushFails = ok ? 0 : flushFails + 1;
+  if (DB.outbox.length || DB.notes.length) flushSoon(ok ? 300 : Math.min(60000, 1500 * flushFails * flushFails));
 }
 let pulling = false;
 async function pull(full) {
   if (!navigator.onLine || pulling || BRIDGE.url.startsWith('__')) return;
   pulling = true; setSync('busy');
-  try {
-    const r = await fetch(BRIDGE.url + '?key=' + encodeURIComponent(BRIDGE.key) + '&what=all&since=' + (full ? 0 : Math.max(0, DB.lastSync - 60000)), { cache: 'no-store' });
-    const j = await r.json();
-    if (!j.ok) throw new Error(j.error || 'pull');
-    let changed = 0;
-    (j.items || []).forEach(o => {
-      const loc = DB.items[o.id];
-      if (!loc || (o.u || 0) > (loc.u || 0)) { if (!DB.outbox.includes(o.id)) { DB.items[o.id] = o; changed++; } }
-    });
-    DB.lastSync = j.now || Date.now(); saveDB(); setSync(DB.outbox.length ? 'busy' : 'ok');
-    if (changed) { render(); document.dispatchEvent(new CustomEvent('nous:changed')); }
-    if (DB.outbox.length) flush();
-  } catch (e) { setSync('err'); }
+  for (let i = 0; i < 2; i++) {
+    const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 40000);
+    try {
+      const r = await fetch(BRIDGE.url + '?key=' + encodeURIComponent(BRIDGE.key) + '&what=all&since=' + (full ? 0 : Math.max(0, DB.lastSync - 60000)), { cache: 'no-store', signal: ctl.signal });
+      const j = await r.json();
+      if (!j.ok || !Array.isArray(j.items)) throw new Error(j.error || 'pull');
+      let changed = 0;
+      j.items.forEach(o => {
+        const loc = DB.items[o.id];
+        if (!loc || (o.u || 0) > (loc.u || 0)) { if (!DB.outbox.includes(o.id)) { DB.items[o.id] = o; changed++; } }
+      });
+      DB.lastSync = j.now || Date.now(); saveDB(); setSync(DB.outbox.length ? 'busy' : 'ok');
+      if (changed) { render(); document.dispatchEvent(new CustomEvent('nous:changed')); }
+      if (DB.outbox.length || DB.notes.length) flush();
+      break;
+    } catch (e) { setSync('err'); if (!i) await sleep(1500); }
+    finally { clearTimeout(to); }
+  }
   pulling = false;
 }
-async function post(payload) {
+/* Appel POST au pont. Le pont renvoie toujours { what } = la demande : toute autre réponse (page « introuvable » de Google,
+   POST changé en GET par Safari…) est rejetée et on réessaie. Côté pont, tout est rejouable sans doublon. */
+async function post(payload, opts) {
+  opts = opts || {};
   const body = JSON.stringify(Object.assign({ key: BRIDGE.key }, payload));
-  // keepalive est limité à 64 Ko par les navigateurs : on ne l'active que pour les petits envois
-  const r = await fetch(BRIDGE.url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body, keepalive: body.length < 60000 });
-  return r.json();
+  let err = null;
+  for (let i = 0; i < (opts.tries || 4); i++) {
+    if (i) await sleep(Math.min(8000, 700 * i * i));
+    const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), opts.timeout || 45000);
+    try {
+      const r = await fetch(BRIDGE.url, { method: 'POST', headers: { 'Content-Type': 'text/plain' }, body, signal: ctl.signal });
+      const txt = await r.text();
+      let j = null; try { j = JSON.parse(txt); } catch (e) {}
+      if (j && j.what === payload.what) return j;
+      err = new Error(j && j.error ? j.error : 'réponse illisible');
+    } catch (e) { err = e; }
+    finally { clearTimeout(to); }
+  }
+  throw err || new Error('réseau');
 }
-/* notif ntfy vers l'autre (ou 'both'). Désactivé pour l'instant (NOTIFS_ON) : on verra plus tard la meilleure solution. */
-const NOTIFS_ON = false;
-function notify(to, title, msg, tags) { if (!NOTIFS_ON || BRIDGE.url.startsWith('__')) return; post({ what: 'notify', to: to || YOU(), title, msg, tags: tags || '' }).catch(() => {}); }
+
+// ---------- notifications (Web Push natif : pas d'appli à installer, juste Nous sur l'écran d'accueil) ----------
+const NOTIFS_ON = true;
+function notify(to, title, msg, kind) {
+  if (!NOTIFS_ON || !ME) return;
+  DB.notes.push({ to: to || YOU(), from: ME, title, msg, kind: kind || '', nid: uid('n'), at: Date.now() });
+  saveDB(); flushSoon();
+}
+// type de notif -> écran à ouvrir quand on la touche
+const KIND_VIEW = {
+  ping: ['home'], meet: ['home'], qd: ['home'], quote: ['home'], photo: ['home'], test: ['home'],
+  album: ['duo', 'duo', 'photos'], cine: ['duo', 'duo', 'cine'], match: ['duo', 'duo', 'swipe'], envie: ['duo', 'duo', 'swipe'], wish: ['duo', 'duo', 'wish'], coupon: ['duo', 'duo', 'coupon'],
+  english: ['games', 'game', 'english'], quiz: ['games', 'game', 'quiz'], defi: ['games', 'game', 'defi'], guess: ['games', 'game', 'guess'], wheel: ['games', 'game', 'wheel'], life: ['games', 'game', 'life'],
+  checkin: ['us', 'us', 'checkin'], mood: ['us', 'us', 'mood'], letter: ['us', 'us', 'letters'], capsule: ['us', 'us', 'capsules'], idea: ['us', 'us', 'ideas'],
+};
+function openKind(kind) { const v = KIND_VIEW[kind]; if (!v || !ME) return; VIEW.tab = v[0]; if (v[1]) VIEW[v[1]] = v[2]; closeSheet(); render(); scrollTop(); }
+const PUSH = {
+  ios: /iPad|iPhone|iPod/.test(navigator.userAgent) || (navigator.platform === 'MacIntel' && navigator.maxTouchPoints > 1),
+  standalone: () => matchMedia('(display-mode: standalone)').matches || navigator.standalone === true,
+  supported: () => 'serviceWorker' in navigator && 'PushManager' in window && 'Notification' in window,
+  // 'install' (iPhone : ouvrir depuis l'écran d'accueil) | 'unsupported' | 'default' | 'granted' | 'denied'
+  state() { if (!this.supported()) return this.ios && !this.standalone() ? 'install' : 'unsupported'; return Notification.permission; },
+};
+const b64uBytes = s => { s = String(s).replace(/-/g, '+').replace(/_/g, '/'); s += '='.repeat((4 - s.length % 4) % 4); return Uint8Array.from(atob(s), c => c.charCodeAt(0)); };
+async function pushInfo() {
+  const r = await fetch(BRIDGE.url + '?key=' + encodeURIComponent(BRIDGE.key) + '&what=push', { cache: 'no-store' });
+  const j = await r.json(); if (!j.ok || !j.vapid) throw new Error('pont');
+  localStorage.setItem('nous-vapid', j.vapid);
+  return j;
+}
+async function vapidKey() { return localStorage.getItem('nous-vapid') || (await pushInfo()).vapid; }
+// À appeler directement depuis un toucher : sur iPhone, la demande d'autorisation doit venir d'un geste.
+async function enablePush() {
+  const st = PUSH.state();
+  if (st === 'install' || st === 'unsupported') throw new Error(st);
+  const perm = await Notification.requestPermission();
+  if (perm !== 'granted') throw new Error(perm);
+  if (!(await syncPush(true))) throw new Error('pont');
+  return true;
+}
+// Abonne ce téléphone et le signale au pont (au lancement, sans rien demander si l'autorisation est déjà donnée).
+async function syncPush(force) {
+  if (!ME || PUSH.state() !== 'granted' || BRIDGE.url.startsWith('__')) return false;
+  const reg = await navigator.serviceWorker.ready;
+  const key = b64uBytes(await vapidKey());
+  let sub = await reg.pushManager.getSubscription();
+  const cur = sub && sub.options && sub.options.applicationServerKey ? new Uint8Array(sub.options.applicationServerKey) : null;
+  if (sub && cur && (cur.length !== key.length || cur.some((b, i) => b !== key[i]))) { await sub.unsubscribe().catch(() => {}); sub = null; }
+  if (!sub) sub = await reg.pushManager.subscribe({ userVisibleOnly: true, applicationServerKey: key });
+  const j = sub.toJSON(), sig = ME + '|' + j.endpoint;
+  let last = {}; try { last = JSON.parse(localStorage.getItem('nous-push') || '{}'); } catch (e) {}
+  if (!force && last.sig === sig && Date.now() - (last.at || 0) < 3 * 864e5) return true;
+  const u = navigator.userAgent, dev = /iPhone/.test(u) ? 'iPhone' : /iPad/.test(u) ? 'iPad' : /Android/.test(u) ? 'Android' : /Mac/.test(u) ? 'Mac' : 'Navigateur';
+  const r = await post({ what: 'push_sub', user: ME, sub: j, dev });
+  if (r.ok) localStorage.setItem('nous-push', JSON.stringify({ sig, at: Date.now() }));
+  return !!r.ok;
+}
 
 // ---------- photos ----------
+// Une photo part en petits morceaux (45 Ko), chacun réessayé ; le pont les assemble. Les gros envois en un bloc
+// échouaient souvent sur iPhone (réseau mobile, réponse de Google perdue) alors que la photo arrivait parfois sur le Drive.
+const PHOTO_CHUNK = 45000;
 function compressImage(file, max) {
   return new Promise((res, rej) => {
     const img = new Image(); const url = URL.createObjectURL(file);
     img.onload = () => {
-      const k = Math.min(1, (max || 1400) / Math.max(img.width, img.height));
-      const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
-      c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
-      URL.revokeObjectURL(url);
-      res(c.toDataURL('image/jpeg', 0.82).split(',')[1]);
+      try {
+        const k = Math.min(1, (max || 1280) / Math.max(img.width, img.height));
+        const c = document.createElement('canvas'); c.width = Math.round(img.width * k); c.height = Math.round(img.height * k);
+        c.getContext('2d').drawImage(img, 0, 0, c.width, c.height);
+        URL.revokeObjectURL(url);
+        const data = c.toDataURL('image/jpeg', 0.8).split(',')[1];
+        if (!data || data.length < 500) return rej(new Error('image vide'));
+        res(data);
+      } catch (e) { rej(e); }
     };
-    img.onerror = rej; img.src = url;
+    img.onerror = () => { URL.revokeObjectURL(url); rej(new Error('format')); };
+    img.src = url;
   });
 }
 function fileToBase64(file) { return new Promise((res, rej) => { const r = new FileReader(); r.onload = () => res(String(r.result).split(',')[1]); r.onerror = rej; r.readAsDataURL(file); }); }
-async function uploadPhoto(file, name) {
-  let data, mime = 'image/jpeg';
-  try { data = await compressImage(file); }
-  catch (e) { data = await fileToBase64(file); mime = file.type || 'image/jpeg'; } // HEIC ou format non décodable : on envoie tel quel, Drive le convertit à l'affichage
-  if (!data) throw new Error('lecture impossible');
-  const r = await post({ what: 'photo', name: name || ('photo-' + Date.now() + (mime === 'image/jpeg' ? '.jpg' : '')), data, mime });
-  if (!r.ok) throw new Error(r.error || 'upload');
-  return r.url;
+async function photoData(file) {
+  try { return { b64: await compressImage(file), mime: 'image/jpeg' }; }
+  catch (e) { // HEIC ou format que le navigateur ne sait pas lire : on envoie tel quel si ce n'est pas énorme
+    if (file.size > 8e6) throw new Error('photo trop lourde');
+    return { b64: await fileToBase64(file), mime: /^image\//.test(file.type) ? file.type : 'image/jpeg' };
+  }
+}
+async function pool(list, k, fn) { const q = list.slice(); await Promise.all(Array.from({ length: Math.min(k, q.length) }, async () => { while (q.length) await fn(q.shift()); })); }
+// Lance l'envoi tout de suite. job.done = promesse du lien de la photo ; job.retry() relance (seuls les morceaux manquants repartent).
+function photoJob(file, onChange) {
+  const job = { pid: uid('ph'), state: 'up', pct: 3, url: null, preview: URL.createObjectURL(file), done: null };
+  const tell = () => { try { onChange && onChange(job); } catch (e) {} };
+  let data = null, missing = null;
+  const run = async () => {
+    job.state = 'up'; tell();
+    if (!data) data = await photoData(file);
+    const n = Math.max(1, Math.ceil(data.b64.length / PHOTO_CHUNK));
+    if (!missing) missing = [...Array(n).keys()];
+    for (let round = 0; round < 5; round++) {
+      let sentN = n - missing.length;
+      await pool(missing, 3, async i => {
+        try { await post({ what: 'photo_part', pid: job.pid, i, n, data: data.b64.slice(i * PHOTO_CHUNK, (i + 1) * PHOTO_CHUNK) }, { timeout: 60000 }); sentN++; job.pct = Math.round(3 + 87 * sentN / n); tell(); } catch (e) {}
+      });
+      const r = await post({ what: 'photo_done', pid: job.pid, n, mime: data.mime }, { timeout: 60000 }).catch(() => null);
+      if (r && r.ok && r.url) { job.url = r.url; job.state = 'ok'; job.pct = 100; tell(); return r.url; }
+      missing = r && Array.isArray(r.missing) ? r.missing : []; // réponse perdue : le pont dira au prochain tour ce qui manque
+      await sleep(1000 + round * 1500);
+    }
+    missing = null;
+    throw new Error('envoi impossible');
+  };
+  job.retry = () => { job.done = run().catch(e => { job.state = 'err'; job.error = e; tell(); throw e; }); job.done.catch(() => {}); return job.done; };
+  job.retry();
+  return job;
+}
+function photoStateText(j) { return j.state === 'ok' ? 'Photo prête ✓' : j.state === 'err' ? 'La photo n\'est pas partie (réseau). On réessaie quand tu valides.' : 'Envoi de la photo… ' + j.pct + ' %'; }
+// Feuille « aperçu + légende + bouton » : le bouton marche tout de suite, la publication attend que la photo soit en ligne.
+function photoSheet(file, title, fieldsHtml, label, onPublish) {
+  const sh = openSheet(title, `<div class="ph-prev"><img alt=""><div class="ph-bar"><i></i></div></div><div class="small muted mt" data-st>Envoi de la photo…</div>${fieldsHtml}<button class="btn p wide mt" data-ok>${label}</button>`);
+  const st = sh.querySelector('[data-st]'), bar = sh.querySelector('.ph-bar i'), ok = sh.querySelector('[data-ok]');
+  let waiting = false;
+  const job = photoJob(file, j => { bar.style.width = j.pct + '%'; bar.parentNode.classList.toggle('done', j.state === 'ok'); st.textContent = photoStateText(j); if (j.state === 'err') { waiting = false; ok.disabled = false; ok.textContent = 'Réessayer'; } });
+  sh.querySelector('.ph-prev img').src = job.preview;
+  ok.onclick = async () => {
+    if (waiting) return;
+    waiting = true; ok.disabled = true;
+    if (job.state === 'err') job.retry();
+    ok.textContent = job.state === 'ok' ? label : 'Publication dès que la photo est envoyée…';
+    try { const url = await job.done; if (document.body.contains(sh)) onPublish(url, sh); }
+    catch (e) { waiting = false; ok.disabled = false; ok.textContent = 'Réessayer'; }
+  };
+  return sh;
+}
+// Bouton « 📷 Photo » dans un formulaire : ph.url() attend la fin de l'envoi (null si pas de photo).
+function photoInline(btn, stat) {
+  let job = null;
+  btn.onclick = () => pickPhoto(f => { job = photoJob(f, j => { if (stat) stat.textContent = photoStateText(j); }); });
+  return { has: () => !!job, url: async () => { if (!job) return null; if (job.state === 'err') job.retry(); return job.done; } };
 }
 function pickPhoto(cb, capture) {
   let inp = document.getElementById('nous-file');

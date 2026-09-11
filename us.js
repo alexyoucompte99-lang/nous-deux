@@ -26,7 +26,7 @@ function renderCheckin(b) {
     const a = {}; CHECKIN.forEach(q => { a[q.k] = q.num ? segVal(b, 'note') : val(b, `[data-k="${q.k}"]`); });
     if (!a.high && !a.low && !a.miss) return toast('Réponds au moins à quelques questions');
     put({ id: 'checkin-' + wk + '-' + ME, t: 'checkin', by: ME, a, d: today() });
-    notify(YOU(), 'Check-in de la semaine 🗓️', you ? myName() + ' a répondu : vos check-ins sont dévoilés.' : myName() + ' a fait son check-in. À toi !', 'calendar');
+    notify(YOU(), 'Check-in de la semaine 🗓️', you ? myName() + ' a répondu : vos check-ins sont dévoilés.' : myName() + ' a fait son check-in. À toi !', 'checkin');
     renderUsBody();
   };
   b.querySelectorAll('[data-wk]').forEach(x => x.onclick = () => { const w = x.dataset.wk; const a = get('checkin-' + w + '-alex'), m = get('checkin-' + w + '-manon'); openSheet('Semaine du ' + fmtDate(w), (a ? show(a, 'alex') : '') + (m ? show(m, 'manon') : '')); });
@@ -57,7 +57,7 @@ function renderMood(b) {
     const shared = b.querySelector('[data-share]').checked;
     const wasShared = me && me.shared;
     put({ id: 'mood-' + d + '-' + ME, t: 'mood', by: ME, d, mood: cur, note: val(b, '[data-note]'), shared });
-    if (shared && !wasShared) notify(YOU(), 'Humeur du jour 🌤️', myName() + ' partage son humeur : ' + MOODS[cur] + (val(b, '[data-note]') ? ' · ' + val(b, '[data-note]') : ''), 'sun_behind_cloud');
+    if (shared && !wasShared) notify(YOU(), 'Humeur du jour 🌤️', myName() + ' partage son humeur : ' + MOODS[cur] + (val(b, '[data-note]') ? ' · ' + val(b, '[data-note]') : ''), 'mood');
     toast('Enregistré'); renderUsBody();
   };
 }
@@ -77,7 +77,7 @@ function renderLetters(b) {
   b.querySelector('[data-new]').onclick = () => {
     const sh = openSheet('Une lettre pour ' + esc(yourName()), `<label class="f">À ouvrir le</label><input class="in" type="date" data-open min="${addDays(d, 1)}" value="${addDays(d, 30)}"><div class="chips mt">${[[7, 'dans 1 semaine'], [30, 'dans 1 mois'], [90, 'dans 3 mois'], [365, 'dans 1 an']].map(([n, l]) => `<button type="button" class="chip" data-n="${n}">${l}</button>`).join('')}</div><label class="f">La lettre</label><textarea class="in" data-txt style="min-height:180px;font-family:var(--display);font-size:16px" placeholder="Chère…"></textarea><button class="btn p wide mt2" data-ok>Sceller 💌</button><div class="muted small mt">${esc(yourName())} saura qu'une lettre l'attend, sans pouvoir la lire avant la date.</div>`);
     sh.querySelectorAll('[data-n]').forEach(x => x.onclick = () => sh.querySelector('[data-open]').value = addDays(d, +x.dataset.n));
-    sh.querySelector('[data-ok]').onclick = () => { const txt = val(sh, '[data-txt]'), open = val(sh, '[data-open]'); if (!txt || !open || open <= d) return toast('Texte et date future'); put({ id: uid('letter'), t: 'letter', from: ME, to: YOU(), txt, open, d, notified: false }); notify(YOU(), 'Une lettre scellée 💌', myName() + " t'a écrit une lettre. Ouverture " + fmtLong(open) + '.', 'love_letter'); sh.close(); renderUsBody(); toast('Scellée jusqu\'au ' + fmtDate(open)); };
+    sh.querySelector('[data-ok]').onclick = () => { const txt = val(sh, '[data-txt]'), open = val(sh, '[data-open]'); if (!txt || !open || open <= d) return toast('Texte et date future'); put({ id: uid('letter'), t: 'letter', from: ME, to: YOU(), txt, open, d, notified: false }); notify(YOU(), 'Une lettre scellée 💌', myName() + " t'a écrit une lettre. Ouverture " + fmtLong(open) + '.', 'letter'); sh.close(); renderUsBody(); toast('Scellée jusqu\'au ' + fmtDate(open)); };
   };
   b.querySelectorAll('[data-del]').forEach(x => x.onclick = async () => { if (await confirmSheet('Retirer la lettre ?', 'Elle ne sera jamais ouverte.', 'Retirer')) { remove(x.dataset.del); renderUsBody(); } });
 }
@@ -92,7 +92,7 @@ function renderCapsules(b) {
     ${caps.length ? caps.map(c => { const its = items(c); const open = c.open <= d; const mineN = its.filter(i => i.by === ME).length; return `<div class="capsule ${open ? 'open' : ''} tap" data-cap="${c.id}"><div class="lock">${open ? '🔓' : '🔒'}</div><div class="t">${esc(c.title)}</div><div class="m">${open ? 'Ouverte ' + fmtLong(c.open) : 'Ouverture ' + fmtLong(c.open) + ' · J-' + daysBetween(d, c.open)}</div><div class="m mt">${its.length} souvenir${its.length > 1 ? 's' : ''} dedans${!open ? ' · ' + mineN + ' de toi' : ''}</div></div>`; }).join('') : empty('Créez votre première capsule à ouvrir dans le futur.', '⏳')}`;
   b.querySelector('[data-new]').onclick = () => {
     const sh = openSheet('Nouvelle capsule', `<label class="f">Titre</label><input class="in" data-title placeholder="Notre première année, Fin de la distance…"><label class="f">À ouvrir le</label><input class="in" type="date" data-open min="${addDays(d, 1)}" value="${addDays(d, 365)}"><button class="btn p wide mt2" data-ok>Créer</button>`);
-    sh.querySelector('[data-ok]').onclick = () => { const title = val(sh, '[data-title]'), open = val(sh, '[data-open]'); if (!title || !open || open <= d) return toast('Titre et date future'); const id = uid('capsule'); put({ id, t: 'capsule', title, open, by: ME, d }); notify(YOU(), 'Capsule temporelle ⏳', myName() + ' a créé la capsule « ' + title + ' », ouverture ' + fmtLong(open) + '. Glisse-y des souvenirs.', 'hourglass'); sh.close(); capsuleSheet(id); renderUsBody(); };
+    sh.querySelector('[data-ok]').onclick = () => { const title = val(sh, '[data-title]'), open = val(sh, '[data-open]'); if (!title || !open || open <= d) return toast('Titre et date future'); const id = uid('capsule'); put({ id, t: 'capsule', title, open, by: ME, d }); notify(YOU(), 'Capsule temporelle ⏳', myName() + ' a créé la capsule « ' + title + ' », ouverture ' + fmtLong(open) + '. Glisse-y des souvenirs.', 'capsule'); sh.close(); capsuleSheet(id); renderUsBody(); };
   };
   b.querySelectorAll('[data-cap]').forEach(x => x.onclick = () => capsuleSheet(x.dataset.cap));
 }
@@ -110,9 +110,14 @@ function capsuleSheet(id) {
     ${its.filter(i => i.by === ME).length ? `<div class="sec"><h2>Mes souvenirs dedans</h2></div>${its.filter(i => i.by === ME).map(i => `<div class="cap-item"><div class="small muted">${fmtDate(i.d)}</div>${i.txt ? `<div style="white-space:pre-wrap">${esc(i.txt)}</div>` : ''}${i.url ? `<img src="${esc(i.url)}" alt="">` : ''}</div>`).join('')}` : ''}
     ${c.by === ME && !its.length ? `<button class="btn ghost sm mt2" data-del>Supprimer la capsule</button>` : ''}`}`, { cls: 'full' });
   if (firstOpen) { localStorage.setItem('nous-capopen-' + id, '1'); setTimeout(burst, 300); }
-  let url = null;
-  const ph = sh.querySelector('[data-photo]'); if (ph) ph.onclick = () => pickPhoto(async f => { sh.querySelector('[data-pstat]').textContent = 'Envoi…'; try { url = await uploadPhoto(f); sh.querySelector('[data-pstat]').textContent = 'Photo ✓'; } catch (e) { sh.querySelector('[data-pstat]').textContent = 'Échec'; } });
-  const add = sh.querySelector('[data-add]'); if (add) add.onclick = () => { const txt = val(sh, '[data-txt]'); if (!txt && !url) return toast('Un mot ou une photo'); put({ id: uid('capItem'), t: 'capItem', capsule: id, by: ME, txt, url, d }); notify(YOU(), 'Capsule ⏳', myName() + ' a glissé un souvenir dans « ' + c.title + ' »', 'hourglass'); toast('Scellé ✓'); capsuleSheet(id); renderUsBody(); };
+  const ph = sh.querySelector('[data-photo]') ? photoInline(sh.querySelector('[data-photo]'), sh.querySelector('[data-pstat]')) : null;
+  const add = sh.querySelector('[data-add]'); if (add) add.onclick = async () => {
+    const txt = val(sh, '[data-txt]');
+    if (!txt && !(ph && ph.has())) return toast('Un mot ou une photo');
+    let url = null;
+    if (ph && ph.has()) { add.disabled = true; add.textContent = 'Envoi de la photo…'; try { url = await ph.url(); } catch (e) { add.disabled = false; add.textContent = 'Glisser dans la capsule'; return toast('La photo n\'est pas partie, retouche pour réessayer'); } }
+    put({ id: uid('capItem'), t: 'capItem', capsule: id, by: ME, txt, url, d }); notify(YOU(), 'Capsule ⏳', myName() + ' a glissé un souvenir dans « ' + c.title + ' »', 'capsule'); toast('Scellé ✓'); capsuleSheet(id); renderUsBody();
+  };
   const del = sh.querySelector('[data-del]'); if (del) del.onclick = () => { remove(id); sh.close(); renderUsBody(); };
 }
 
@@ -123,7 +128,7 @@ function renderIdeas(b) {
     <div class="card"><textarea class="in" data-txt placeholder="Mon idée…"></textarea><div class="row mt">${chipsHtml('icat', [{ v: 'Appli', l: '📱 Appli' }, { v: 'Nous', l: '💞 Nous deux' }, { v: 'Bug', l: '🐛 Bug' }], 'Appli')}<button class="btn p" data-add>Ajouter</button></div></div>
     <div class="card" style="padding:6px 16px">${list.length ? list.map(i => `<div class="li ${i.done ? 'done' : ''}"><button class="cb" data-tg="${i.id}">${i.done ? '✓' : ''}</button><div class="grow"><div class="t">${nl(i.txt)}</div><div class="m">${esc(i.cat || 'Appli')} · ${esc(nameOf(i.by))} · ${fmtDate(i.d)}</div></div>${i.by === ME ? `<button class="soft" data-rm="${i.id}">✕</button>` : ''}</div>`).join('') : '<div class="muted small" style="padding:8px 0">La boîte est vide. La première idée est pour toi.</div>'}</div>`;
   wireSegs(b);
-  b.querySelector('[data-add]').onclick = () => { const txt = val(b, '[data-txt]'); if (!txt) return; put({ id: uid('idea'), t: 'idea', txt, cat: segVal(b, 'icat') || 'Appli', by: ME, d: today(), done: false }); notify(YOU(), 'Boîte à idées 💡', myName() + ' : ' + txt, 'bulb'); toast('Dans la boîte 💡'); renderUsBody(); };
+  b.querySelector('[data-add]').onclick = () => { const txt = val(b, '[data-txt]'); if (!txt) return; put({ id: uid('idea'), t: 'idea', txt, cat: segVal(b, 'icat') || 'Appli', by: ME, d: today(), done: false }); notify(YOU(), 'Boîte à idées 💡', myName() + ' : ' + txt, 'idea'); toast('Dans la boîte 💡'); renderUsBody(); };
   b.querySelectorAll('[data-tg]').forEach(x => x.onclick = () => { const i = get(x.dataset.tg); i.done = !i.done; put(i); renderUsBody(); });
   b.querySelectorAll('[data-rm]').forEach(x => x.onclick = () => { remove(x.dataset.rm); renderUsBody(); });
 }

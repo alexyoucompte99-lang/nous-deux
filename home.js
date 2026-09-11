@@ -7,6 +7,7 @@ function renderHome(root) {
   const greet = { nuit: 'Bonne nuit', aube: 'Bonjour', matin: 'Bonjour', jour: 'Hello', soir: 'Bonsoir', crepuscule: 'Bonsoir' }[document.body.dataset.sky] || 'Hello';
   let html = `<div class="hello"><h1>${greet} ${esc(myName())}</h1><div class="sub">${fmtLong(d)}</div></div>`;
   html += countdownCard();
+  html += notifCard();
   html += pulseCard();
   html += questionCard(d);
   html += quoteCard(d);
@@ -42,8 +43,19 @@ function meetSheet(id) {
   sh.querySelector('[data-add]').onclick = () => { const v = val(sh, '[data-new]'); if (!v) return; m.todos.push({ txt: v, done: false, by: ME }); m.d = val(sh, '[data-d]') || m.d; m.place = val(sh, '[data-place]'); put(m); rerender(); };
   sh.querySelectorAll('[data-tg]').forEach(b => b.onclick = () => { m.todos[+b.dataset.tg].done = !m.todos[+b.dataset.tg].done; put(m); rerender(); });
   sh.querySelectorAll('[data-rm]').forEach(b => b.onclick = () => { m.todos.splice(+b.dataset.rm, 1); put(m); rerender(); });
-  sh.querySelector('[data-save]').onclick = () => { m.d = val(sh, '[data-d]'); if (!m.d) return toast('Il faut une date'); m.place = val(sh, '[data-place]'); const isNew = !get(m.id); put(m); sh.close(); render(); toast('Enregistré'); if (isNew) notify(YOU(), 'Retrouvailles 📅', myName() + ' a noté une date : ' + fmtLong(m.d) + (m.place ? ' · ' + m.place : ''), 'calendar'); };
+  sh.querySelector('[data-save]').onclick = () => { m.d = val(sh, '[data-d]'); if (!m.d) return toast('Il faut une date'); m.place = val(sh, '[data-place]'); const isNew = !get(m.id); put(m); sh.close(); render(); toast('Enregistré'); if (isNew) notify(YOU(), 'Retrouvailles 📅', myName() + ' a noté une date : ' + fmtLong(m.d) + (m.place ? ' · ' + m.place : ''), 'meet'); };
   sh.querySelector('[data-del]').onclick = async () => { if (get(m.id) && await confirmSheet('Supprimer ?', 'Cette date sera retirée.', 'Supprimer')) { remove(m.id); closeSheet(); render(); } else if (!get(m.id)) sh.close(); };
+}
+
+// ---------- activer les notifs (tant que ce n'est pas fait sur ce téléphone) ----------
+function notifCard() {
+  const st = PUSH.state();
+  if (st !== 'default' && st !== 'install') return '';
+  let later = 0; try { later = +localStorage.getItem('nous-notif-later') || 0; } catch (e) {}
+  if (Date.now() < later) return '';
+  const you = esc(yourName());
+  return `<div class="card notif-card"><div class="card-h"><h2>🔔 Les notifs</h2><button class="btn sm ghost" data-nlater>Plus tard</button></div>
+    ${st === 'install' ? `<div class="muted small">Pour savoir quand ${you} pense à toi : ajoute Nous à l'écran d'accueil (Safari → Partager → « Sur l'écran d'accueil »), puis ouvre-la depuis l'icône.</div>` : `<div class="muted small">Une notif quand ${you} pense à toi ou remplit quelque chose. Jamais de rappel de l'appli.</div><button class="btn p wide mt" data-non>Activer les notifications</button>`}</div>`;
 }
 
 // ---------- je pense à toi ----------
@@ -51,14 +63,14 @@ function pulseCard() {
   const pings = theirs('ping').sort(byNewest);
   const last = pings[0];
   const todayN = mine('ping').filter(p => p.d === today()).length;
-  return `<button class="pulse-btn" data-pulse><div class="heart">💛</div><div class="grow"><div class="t">Je pense à toi</div><div class="s">${last ? esc(yourName()) + ' a pensé à toi ' + ago(last.u) : 'Une touche, et ' + esc(yourName()) + ' voit un petit signe de toi.'}${todayN ? ' · ' + todayN + ' envoyé' + (todayN > 1 ? 's' : '') + " aujourd'hui" : ''}</div></div><div style="font-size:22px">›</div></button>`;
+  return `<button class="pulse-btn" data-pulse><div class="heart">💛</div><div class="grow"><div class="t">Je pense à toi</div><div class="s">${last ? esc(yourName()) + ' a pensé à toi ' + ago(last.u) : 'Une touche, et ' + esc(yourName()) + ' reçoit un petit signe de toi.'}${todayN ? ' · ' + todayN + ' envoyé' + (todayN > 1 ? 's' : '') + " aujourd'hui" : ''}</div></div><div style="font-size:22px">›</div></button>`;
 }
 const PING_MSGS = ['pense à toi 💛', 'pense à toi, là, maintenant 💛', 't\'envoie un petit signe 💛', 'a une pensée pour toi ✨', 'pense fort à toi 💛'];
 function sendPulse(btn) {
   haptic();
   btn.classList.add('sent'); setTimeout(() => btn.classList.remove('sent'), 700);
   put({ id: uid('ping'), t: 'ping', by: ME, d: today() });
-  notify(YOU(), myName() + ' 💛', myName() + ' ' + pick(PING_MSGS, Math.floor(Math.random() * 100)), 'yellow_heart');
+  notify(YOU(), myName() + ' 💛', myName() + ' ' + pick(PING_MSGS, Math.floor(Math.random() * 100)), 'ping');
   toast('Envoyé à ' + yourName() + ' 💛');
   burst();
 }
@@ -84,7 +96,7 @@ function answerQuestion(root) {
   const d = today();
   put({ id: 'qd-' + d + '-' + ME, t: 'qd', d, by: ME, a });
   const you = get('qd-' + d + '-' + YOU());
-  notify(YOU(), 'Question du jour 💬', you ? myName() + ' a répondu : vos deux réponses sont dévoilées !' : myName() + ' a répondu à la question du jour. À toi !', 'speech_balloon');
+  notify(YOU(), 'Question du jour 💬', you ? myName() + ' a répondu : vos deux réponses sont dévoilées !' : myName() + ' a répondu à la question du jour. À toi !', 'qd');
   render(); toast(you ? 'Réponses dévoilées ✨' : 'Envoyé, on attend ' + yourName());
 }
 function questionHistory() {
@@ -110,7 +122,7 @@ function sendQuoteReply(root) {
   const txt = val(root, '[data-qr]'); if (!txt) return;
   const d = today();
   put({ id: uid('quoteR'), t: 'quoteR', d, by: ME, txt });
-  notify(YOU(), 'Citation du jour 🪶', myName() + ' : ' + txt, 'feather');
+  notify(YOU(), 'Citation du jour 🪶', myName() + ' : ' + txt, 'quote');
   render();
 }
 function quoteHistory() {
@@ -126,9 +138,11 @@ function photosCard(d) {
   return `<div class="card"><div class="card-h"><h2>📸 Photo du jour</h2><button class="btn sm ghost" data-gallery>Toutes</button></div><div class="photos2">${slot(ME)}${slot(YOU())}</div></div>`;
 }
 function addDayPhoto(file) {
-  const sh = openSheet('Photo du jour', `<div class="muted small">Envoi en cours…</div><label class="f">Légende (facultatif)</label><input class="in" data-cap placeholder="Un mot, un lieu, une vibe"><button class="btn p wide mt" data-ok disabled>Publier</button>`);
-  const ok = sh.querySelector('[data-ok]');
-  uploadPhoto(file).then(url => { sh.querySelector('.muted').textContent = 'Photo prête ✓'; ok.disabled = false; ok.onclick = () => { put({ id: uid('photo'), t: 'photo', kind: 'day', d: today(), by: ME, url, cap: val(sh, '[data-cap]') }); notify(YOU(), 'Photo du jour 📸', myName() + ' a posté sa photo du jour', 'camera'); sh.close(); render(); toast('Publiée'); }; }).catch(e => { sh.querySelector('.muted').textContent = 'Échec de l\'envoi : ' + (e.message || e) + '. Vérifie le réseau et réessaie.'; });
+  photoSheet(file, 'Photo du jour', `<label class="f">Légende (facultatif)</label><input class="in" data-cap placeholder="Un mot, un lieu, une vibe">`, 'Publier', (url, sh) => {
+    put({ id: uid('photo'), t: 'photo', kind: 'day', d: today(), by: ME, url, cap: val(sh, '[data-cap]') });
+    notify(YOU(), 'Photo du jour 📸', myName() + ' a posté sa photo du jour', 'photo');
+    sh.close(); render(); toast('Publiée');
+  });
 }
 function viewPhoto(url, cap) { const v = h(`<div class="viewer"><button class="x">✕</button><img src="${esc(url)}" alt=""><div class="c">${esc(cap || '')}</div></div>`).firstChild; v.onclick = () => v.remove(); document.body.appendChild(v); }
 
@@ -168,6 +182,10 @@ function memoryCard() {
 function wireHome(root) {
   root.querySelectorAll('[data-meet]').forEach(c => c.onclick = () => meetSheet(c.dataset.meet || null));
   root.querySelector('[data-pulse]').onclick = e => sendPulse(e.currentTarget);
+  const non = root.querySelector('[data-non]');
+  if (non) non.onclick = () => { non.disabled = true; enablePush().then(() => { toast('Notifications activées 🔔'); render(); }).catch(e => { toast(e.message === 'denied' ? 'Notifications refusées' : 'Échec : ' + e.message); render(); }); };
+  const nl8 = root.querySelector('[data-nlater]');
+  if (nl8) nl8.onclick = () => { try { localStorage.setItem('nous-notif-later', String(Date.now() + 3 * 864e5)); } catch (e) {} render(); };
   const qs = root.querySelector('[data-qsend]'); if (qs) qs.onclick = () => answerQuestion(root);
   root.querySelector('[data-qhist]').onclick = questionHistory;
   root.querySelector('[data-qthist]').onclick = quoteHistory;

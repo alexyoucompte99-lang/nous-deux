@@ -56,7 +56,7 @@ function engToday(b) {
   const say = txt => { try { const u = new SpeechSynthesisUtterance(txt); u.lang = 'en-GB'; speechSynthesis.cancel(); speechSynthesis.speak(u); } catch (e) { toast('Lecture indisponible'); } };
   b.querySelector('[data-say]').onclick = () => say(w.en + '. ' + w.ex);
   const learn = b.querySelector('[data-learn]'); if (learn && !known) learn.onclick = () => { put({ id: 'engWord-' + idx + '-' + ME, t: 'engWord', by: ME, w: idx, d }); burst(); toast('+10 XP'); renderGameBody(); };
-  const ps = b.querySelector('[data-psend]'); if (ps) ps.onclick = () => { const txt = val(b, '[data-ptxt]'); if (!txt) return; put({ id: 'engPhrase-' + d + '-' + ME, t: 'engPhrase', by: ME, w: idx, txt, d }); notify(YOU(), 'English 🇬🇧', myName() + ' a écrit sa phrase avec « ' + w.en + ' » : ' + txt, 'uk'); toast('+10 XP'); renderGameBody(); };
+  const ps = b.querySelector('[data-psend]'); if (ps) ps.onclick = () => { const txt = val(b, '[data-ptxt]'); if (!txt) return; put({ id: 'engPhrase-' + d + '-' + ME, t: 'engPhrase', by: ME, w: idx, txt, d }); notify(YOU(), 'English 🇬🇧', myName() + ' a écrit sa phrase avec « ' + w.en + ' » : ' + txt, 'english'); toast('+10 XP'); renderGameBody(); };
 }
 function engPastPhrases() {
   const days = {}; all('engPhrase').forEach(p => { if (p.d === today()) return; days[p.d] = days[p.d] || {}; days[p.d][p.by] = p; });
@@ -84,7 +84,7 @@ function engQuizRun(b) {
   const draw = () => {
     if (k >= qs.length) {
       put({ id: uid('engQuiz'), t: 'engQuiz', by: ME, score, n: qs.length, d: today() });
-      notify(YOU(), 'English ⚡', myName() + ' vient de faire ' + score + '/8 au quiz express. À toi !', 'zap');
+      notify(YOU(), 'English ⚡', myName() + ' vient de faire ' + score + '/8 au quiz express. À toi !', 'english');
       if (score >= 6) burst();
       b.innerHTML = `<div class="card center"><div style="font-size:44px">${score >= 7 ? '🏆' : score >= 5 ? '👏' : '💪'}</div><div class="big">${score}/8</div><div class="muted">+${score * 5} XP</div><button class="btn p mt" data-again>Encore un</button> <button class="btn mt" data-back>Retour</button></div>`;
       b.querySelector('[data-again]').onclick = () => engQuizRun(b); b.querySelector('[data-back]').onclick = () => { renderGames(document.getElementById('view')); VIEW.game = 'english'; renderGameBody(); };

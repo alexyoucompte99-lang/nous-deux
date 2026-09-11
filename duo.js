@@ -26,9 +26,11 @@ function renderPhotos(b) {
     ${album.length ? gal(album) : empty('Ajoutez vos photos préférées de vous deux.', '🖼️')}`;
   b.querySelectorAll('[data-view]').forEach(g => g.onclick = () => viewPhoto(g.dataset.view, g.dataset.cap));
   b.querySelector('[data-add-album]').onclick = () => pickPhoto(file => {
-    const sh = openSheet('Album commun', `<div class="muted small">Envoi en cours…</div><label class="f">Quand ?</label><input class="in" type="date" data-d value="${today()}"><label class="f">Légende</label><input class="in" data-cap placeholder="Où, quand, quoi"><button class="btn p wide mt" data-ok disabled>Ajouter</button>`);
-    const ok = sh.querySelector('[data-ok]');
-    uploadPhoto(file).then(url => { sh.querySelector('.muted').textContent = 'Photo prête ✓'; ok.disabled = false; ok.onclick = () => { put({ id: uid('photo'), t: 'photo', kind: 'album', d: val(sh, '[data-d]') || today(), by: ME, url, cap: val(sh, '[data-cap]') }); notify(YOU(), 'Album 🖼️', myName() + ' a ajouté une photo à votre album', 'frame_with_picture'); sh.close(); renderDuoBody(); }; }).catch(e => sh.querySelector('.muted').textContent = 'Échec : ' + e.message);
+    photoSheet(file, 'Album commun', `<label class="f">Quand ?</label><input class="in" type="date" data-d value="${today()}"><label class="f">Légende</label><input class="in" data-cap placeholder="Où, quand, quoi">`, 'Ajouter', (url, sh) => {
+      put({ id: uid('photo'), t: 'photo', kind: 'album', d: val(sh, '[data-d]') || today(), by: ME, url, cap: val(sh, '[data-cap]') });
+      notify(YOU(), 'Album 🖼️', myName() + ' a ajouté une photo à votre album', 'album');
+      sh.close(); renderDuoBody(); toast('Ajoutée');
+    });
   });
 }
 
@@ -45,7 +47,7 @@ function renderCine(b) {
       <label class="f">Où on le regarde</label><input class="in" data-where placeholder="Netflix, Disney+, un lien…">
       <button class="btn p wide mt" data-create>Préparer la soirée</button></div>
       ${past.length ? `<div class="sec"><h2>Déjà vus ensemble</h2></div>${past.map(x => `<div class="li"><div class="grow"><div class="t">${esc(x.title)}</div><div class="m">${fmtDate(x.d)} · ${all('mreact').filter(r => r.movie === x.id).length} réactions</div></div></div>`).join('')}` : ''}`;
-    b.querySelector('[data-create]').onclick = () => { const title = val(b, '[data-title]'); if (!title) return toast('Un titre ?'); put({ id: uid('movie'), t: 'movie', title, where: val(b, '[data-where]'), by: ME, d: today(), startAt: null }); notify(YOU(), 'Soirée ciné 🎬', myName() + ' propose « ' + title + ' » ce soir. Prépare le popcorn.', 'popcorn'); renderDuoBody(); };
+    b.querySelector('[data-create]').onclick = () => { const title = val(b, '[data-title]'); if (!title) return toast('Un titre ?'); put({ id: uid('movie'), t: 'movie', title, where: val(b, '[data-where]'), by: ME, d: today(), startAt: null }); notify(YOU(), 'Soirée ciné 🎬', myName() + ' propose « ' + title + ' » ce soir. Prépare le popcorn.', 'cine'); renderDuoBody(); };
     return;
   }
   const reacts = all('mreact').filter(r => r.movie === m.id).sort((a, c) => a.at - c.at);
@@ -58,7 +60,7 @@ function renderCine(b) {
     <div class="row mt2"><button class="btn ghost sm" data-end>Terminer la soirée</button></div></div>`;
   tick(); cineTimer = setInterval(tick, 1000);
   const feed = b.querySelector('.feed'); feed.scrollTop = feed.scrollHeight;
-  const st = b.querySelector('[data-start]'); if (st) st.onclick = () => { let n = 3; st.disabled = true; const iv = setInterval(() => { st.textContent = n > 0 ? n : 'Go !'; if (n < 0) { clearInterval(iv); m.startAt = Date.now(); m.startBy = ME; put(m); notify(YOU(), 'Top départ 🎬', myName() + ' a lancé « ' + m.title + ' ». Appuie sur play !', 'clapper', 5); renderDuoBody(); } n--; }, 1000); };
+  const st = b.querySelector('[data-start]'); if (st) st.onclick = () => { let n = 3; st.disabled = true; const iv = setInterval(() => { st.textContent = n > 0 ? n : 'Go !'; if (n < 0) { clearInterval(iv); m.startAt = Date.now(); m.startBy = ME; put(m); notify(YOU(), 'Top départ 🎬', myName() + ' a lancé « ' + m.title + ' ». Appuie sur play !', 'cine'); renderDuoBody(); } n--; }, 1000); };
   const send = txt => { if (!txt) return; put({ id: uid('mreact'), t: 'mreact', movie: m.id, by: ME, txt, at: Date.now() }); renderDuoBody(); };
   b.querySelectorAll('[data-r]').forEach(x => x.onclick = () => send(x.dataset.r));
   b.querySelector('[data-send]').onclick = () => send(val(b, '[data-msg]'));
@@ -92,7 +94,7 @@ function renderSwipe(b) {
     put({ id: 'swipe-' + id + '-' + ME, t: 'swipe', card: id, by: ME, yes, d: today() });
     card.classList.add(yes ? 'out-r' : 'out-l');
     const you = swipeOf(id, YOU());
-    if (yes && you && you.yes) { const c = cards.find(x => x.id === id); setTimeout(() => { burst(); toast('Match ! ' + c.t + ' 💞'); }, 250); notify(YOU(), 'Match 💞', 'Vous avez dit oui tous les deux : ' + c.t, 'sparkling_heart'); }
+    if (yes && you && you.yes) { const c = cards.find(x => x.id === id); setTimeout(() => { burst(); toast('Match ! ' + c.t + ' 💞'); }, 250); notify(YOU(), 'Match 💞', 'Vous avez dit oui tous les deux : ' + c.t, 'match'); }
     setTimeout(() => renderDuoBody(), 330);
   };
   b.querySelector('[data-yes]') && (b.querySelector('[data-yes]').onclick = () => decide(true));
@@ -109,7 +111,7 @@ function renderSwipe(b) {
   b.querySelector('[data-add-envie]').onclick = () => {
     const sh = openSheet('Une envie', `<label class="f">Envie</label><input class="in" data-txt placeholder="Un weekend à…, tester…"><label class="f">Catégorie</label>${chipsHtml('cat', ENVIE_CATS.map(c => ({ v: c, l: c })), 'Sorties')}<button class="btn p wide mt2" data-ok>Ajouter au jeu</button><div class="muted small mt">Elle arrivera dans les cartes de ${esc(yourName())}. Tu la swipes aussi.</div>`);
     wireSegs(sh);
-    sh.querySelector('[data-ok]').onclick = () => { const txt = val(sh, '[data-txt]'); if (!txt) return; put({ id: uid('envie'), t: 'envie', txt, cat: segVal(sh, 'cat') || 'Autre', by: ME }); sh.close(); renderDuoBody(); toast('Ajoutée'); };
+    sh.querySelector('[data-ok]').onclick = () => { const txt = val(sh, '[data-txt]'); if (!txt) return; put({ id: uid('envie'), t: 'envie', txt, cat: segVal(sh, 'cat') || 'Autre', by: ME }); notify(YOU(), 'Nouvelle envie 🔥', myName() + ' a ajouté une envie à swiper', 'envie'); sh.close(); renderDuoBody(); toast('Ajoutée'); };
   };
   b.querySelectorAll('[data-towish]').forEach(x => x.onclick = () => { put({ id: uid('wish'), t: 'wish', txt: x.dataset.towish, cat: WISH_CATS.includes(x.dataset.cat) ? x.dataset.cat : 'Activité', by: ME, d: today(), done: false }); toast('Ajouté aux souhaits ⭐'); });
 }
@@ -124,7 +126,7 @@ function renderWish(b) {
     <div class="card" style="padding:6px 16px">${list.length ? list.map(w => `<div class="li ${w.done ? 'done' : ''}"><button class="cb" data-tg="${w.id}">${w.done ? '✓' : ''}</button><div class="grow"><div class="t">${esc(w.txt)}</div><div class="m">${esc(w.cat)} · ${esc(nameOf(w.by))}${w.note ? ' · ' + esc(w.note) : ''}</div></div><button class="soft" data-edit="${w.id}">···</button></div>`).join('') : '<div class="muted small" style="padding:8px 0">Rien ici pour l\'instant.</div>'}</div>`;
   wireSegs(b);
   b.querySelector('[data-seg=wcat]').addEventListener('change', () => { VIEW.wishCat = segVal(b, 'wcat'); renderDuoBody(); });
-  const add = () => { const txt = val(b, '[data-new]'); if (!txt) return; put({ id: uid('wish'), t: 'wish', txt, cat: VIEW.wishCat === 'Tous' ? 'Autre' : VIEW.wishCat, by: ME, d: today(), done: false }); renderDuoBody(); };
+  const add = () => { const txt = val(b, '[data-new]'); if (!txt) return; put({ id: uid('wish'), t: 'wish', txt, cat: VIEW.wishCat === 'Tous' ? 'Autre' : VIEW.wishCat, by: ME, d: today(), done: false }); notify(YOU(), 'Souhaits ⭐', myName() + ' a ajouté un souhait', 'wish'); renderDuoBody(); };
   b.querySelector('[data-add]').onclick = add;
   b.querySelector('[data-new]').onkeydown = e => { if (e.key === 'Enter') add(); };
   b.querySelectorAll('[data-tg]').forEach(x => x.onclick = () => { const w = get(x.dataset.tg); w.done = !w.done; put(w); renderDuoBody(); if (w.done) toast('Fait ✓'); });
@@ -149,7 +151,7 @@ function renderCoupons(b) {
   b.querySelector('[data-new]').onclick = () => {
     const sh = openSheet('Offrir un coupon', `<label class="f">Le coupon</label><input class="in" data-txt placeholder="Un massage, un petit-déj au lit, une soirée sans téléphone…"><div class="muted small mt">Ou pioche :</div><div class="chips mt">${COUPONS.map(c => `<button type="button" class="chip" data-pick="${esc(c)}">${esc(c)}</button>`).join('')}</div><button class="btn p wide mt2" data-ok>Offrir 🎁</button>`);
     sh.querySelectorAll('[data-pick]').forEach(x => x.onclick = () => { sh.querySelector('[data-txt]').value = x.dataset.pick; });
-    sh.querySelector('[data-ok]').onclick = () => { const txt = val(sh, '[data-txt]'); if (!txt) return; put({ id: uid('coupon'), t: 'coupon', txt, from: ME, to: YOU(), d: today(), used: null }); notify(YOU(), 'Un coupon pour toi 🎟️', myName() + " t'offre : " + txt, 'gift'); sh.close(); renderDuoBody(); toast('Offert 🎁'); };
+    sh.querySelector('[data-ok]').onclick = () => { const txt = val(sh, '[data-txt]'); if (!txt) return; put({ id: uid('coupon'), t: 'coupon', txt, from: ME, to: YOU(), d: today(), used: null }); notify(YOU(), 'Un coupon pour toi 🎟️', myName() + " t'offre : " + txt, 'coupon'); sh.close(); renderDuoBody(); toast('Offert 🎁'); };
   };
-  b.querySelectorAll('[data-use]').forEach(x => x.onclick = () => { const c = get(x.dataset.use); c.used = today(); put(c); notify(YOU(), 'Coupon utilisé 🎟️', myName() + ' encaisse son coupon : ' + c.txt, 'ticket'); burst(); renderDuoBody(); });
+  b.querySelectorAll('[data-use]').forEach(x => x.onclick = () => { const c = get(x.dataset.use); c.used = today(); put(c); notify(YOU(), 'Coupon utilisé 🎟️', myName() + ' encaisse son coupon : ' + c.txt, 'coupon'); burst(); renderDuoBody(); });
 }

@@ -35,5 +35,5 @@ function renderAI(root) {
   ta.addEventListener('keydown', e => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send(ta.value); } });
   root.querySelectorAll('[data-s]').forEach(b => b.onclick = () => send(b.dataset.s));
   root.querySelector('[data-clear]').onclick = () => { aiSave([]); render(); };
-  setTimeout(() => { const c = root.querySelector('#chat'); if (c.lastElementChild) c.lastElementChild.scrollIntoView({ block: 'end' }); }, 50);
+  setTimeout(() => { const c = root.querySelector('#chat'); if (c && c.lastElementChild) c.lastElementChild.scrollIntoView({ block: 'end' }); }, 50);
 }

@@ -1,46 +1,72 @@
-// Pont « Nous » : stockage des données de l'appli dans un Google Sheet + photos Drive + notifs ntfy + Complice (API Claude).
+// Pont « Nous » : stockage des données de l'appli dans un Google Sheet + photos Drive + notifs Web Push + Complice (API Claude).
 // KEY est aussi dans l'appli (page publique) : elle évite juste les appels accidentels.
-// Secrets (sujets ntfy, clé Anthropic, id du Sheet) = ScriptProperties, jamais dans ce code.
+// Secrets (clés VAPID, abonnements push, clé Anthropic, id du Sheet) = ScriptProperties, jamais dans ce code.
 //
-// doGet  ?key=…&what=all&since=<ms>   -> { ok, items:[…], now }
+// Chaque réponse POST renvoie { what } = la demande reçue. L'appli rejette toute réponse qui ne correspond pas :
+// Safari transforme parfois un POST en GET sans corps, qui tombait sur doGet et répondait « ok » (photo publiée sans lien).
+//
+// doGet  ?key=…&what=all&since=<ms serveur>   -> { ok, items:[…], now }   (since = horodatage serveur, colonne srv)
+//        ?key=…&what=photo&pid=…              -> { ok, url } si la photo est arrivée
+//        ?key=…&what=push                     -> { ok, vapid, subs:{ alex:n, manon:n } }
 // doPost { key, what, … } :
-//   setup     { app_url?, ntfy_alex?, ntfy_manon? }  crée le Sheet, pose les secrets, installe les rappels
-//   upsert    { items:[…] }                          écrit/écrase par id (dernier `u` gagne)
-//   all       { since }
-//   photo     { name, data(base64), mime }           -> { url } (dossier Drive « Nous »)
-//   notify    { to:'alex'|'manon'|'both', title, msg, tags, prio }
-//   ai        { messages:[{role,content}], context } -> { text }
-//   ai_setup  { api_key }
+//   setup       {}                                   crée le Sheet, génère les clés VAPID, installe le rappel lettres/capsules
+//   upsert      { items:[…], notes:[…] }             écrit/écrase par id (dernier `u` gagne), puis envoie les notifs `notes`
+//   photo_part  { pid, i, n, data(base64) }          un morceau de photo (cache 6 h)
+//   photo_done  { pid, n, mime }                     assemble -> { url } ou { missing:[…] } ; rejouable sans risque
+//   photo       { name, data, mime }                 ancien envoi en un seul bloc (vieilles versions de l'appli)
+//   push_sub    { user, sub:{ endpoint, keys:{ p256dh, auth } }, dev }
+//   push_unsub  { endpoint }
+//   notify      { to, from, title, msg, kind, nid }  notif vers les téléphones de `to` (nid = anti-doublon)
+//   push_test   { user }
+//   ai          { messages:[{role,content}], context } -> { text }
+//   ai_setup    { api_key }
 
 const KEY = 'nous-3e7a91c4d2f85b60';
 const P = PropertiesService.getScriptProperties();
 const TAB = 'Items';
-const HDR = ['id', 'type', 'date', 'updated', 'deleted', 'json'];
+const HDR = ['id', 'type', 'date', 'updated', 'deleted', 'json', 'srv'];
 const TZ = 'Europe/Paris';
+const APP_URL_DEF = 'https://alexyoucompte99-lang.github.io/nous-deux/';
+const PEOPLE = ['alex', 'manon'];
+const PUSH_USERS = ['alex', 'manon', 'diag'];
 
 function doGet(e) {
   const q = (e && e.parameter) || {};
-  if (q.key !== KEY) return out({ ok: true, pong: true, v: 1 });
-  if (q.what === 'all') return out(all_(Number(q.since || 0)));
-  if (q.what === 'diag') return out({ ok: true, ntfy_err: P.getProperty('LAST_NTFY_ERR') || null, ai: !!P.getProperty('ANTHROPIC_KEY'), topics: [!!P.getProperty('NTFY_ALEX'), !!P.getProperty('NTFY_MANON')] });
-  return out({ ok: true, pong: true, v: 1 });
+  if (q.key !== KEY) return out({ ok: false, error: 'key' });
+  try {
+    if (q.what === 'all') return out(Object.assign({ what: 'all' }, all_(Number(q.since || 0))));
+    if (q.what === 'photo') return out(Object.assign({ what: 'photo' }, photoFind_(q.pid)));
+    if (q.what === 'push') return out(Object.assign({ what: 'push' }, pushStatus_()));
+    if (q.what === 'diag') return out({ ok: true, what: 'diag', push_err: P.getProperty('LAST_PUSH_ERR') || null, ai: !!P.getProperty('ANTHROPIC_KEY'), subs: pushStatus_().subs });
+  } catch (err) {
+    return out({ ok: false, what: q.what, error: String(err && err.message || err) });
+  }
+  return out({ ok: false, error: 'get' });
 }
 
 function doPost(e) {
   let p = {};
   try { p = JSON.parse(e.postData.contents); } catch (err) { return out({ ok: false, error: 'bad json' }); }
   if (p.key !== KEY) return out({ ok: false, error: 'bad key' });
+  const res = r => out(Object.assign({ what: p.what }, r));
   try {
-    if (p.what === 'setup') return out(setup_(p));
-    if (p.what === 'upsert') return out(upsert_(p.items || []));
-    if (p.what === 'all') return out(all_(Number(p.since || 0)));
-    if (p.what === 'photo') return out(photo_(p));
-    if (p.what === 'notify') return out({ ok: notifyTo_(p.to, p.title, p.msg, p.tags, p.prio) });
-    if (p.what === 'ai') return out(ai_(p));
-    if (p.what === 'ai_setup') { P.setProperty('ANTHROPIC_KEY', String(p.api_key || '').trim()); return out({ ok: true }); }
-    return out({ ok: false, error: 'unknown what' });
+    switch (p.what) {
+      case 'setup': return res(setup_(p));
+      case 'upsert': return res(upsert_(p.items || [], p.notes || []));
+      case 'all': return res(all_(Number(p.since || 0)));
+      case 'photo_part': return res(photoPart_(p));
+      case 'photo_done': return res(photoDone_(p));
+      case 'photo': return res(photo_(p));
+      case 'push_sub': return res(pushSub_(p));
+      case 'push_unsub': return res(pushUnsub_(p.endpoint));
+      case 'notify': return res(notify_(p));
+      case 'push_test': return res({ ok: true, sent: pushTo_(p.user, { title: 'Nous 💛', body: 'Les notifications marchent sur ce téléphone.', kind: 'test' }) });
+      case 'ai': return res(ai_(p));
+      case 'ai_setup': P.setProperty('ANTHROPIC_KEY', String(p.api_key || '').trim()); return res({ ok: true });
+    }
+    return res({ ok: false, error: 'unknown what' });
   } catch (err) {
-    return out({ ok: false, error: String(err && err.message || err) });
+    return res({ ok: false, error: String(err && err.message || err) });
   }
 }
 function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setMimeType(ContentService.MimeType.JSON); }
@@ -49,14 +75,13 @@ function out(o) { return ContentService.createTextOutput(JSON.stringify(o)).setM
 function autoriser() { setup_({}); Logger.log('OK : ' + book_().getUrl()); }
 function setup_(p) {
   if (p.app_url) P.setProperty('APP_URL', p.app_url);
-  if (p.ntfy_alex) P.setProperty('NTFY_ALEX', p.ntfy_alex);
-  if (p.ntfy_manon) P.setProperty('NTFY_MANON', p.ntfy_manon);
   const ss = book_();
   sheet_(ss);
   const def = ss.getSheetByName('Feuille 1') || ss.getSheetByName('Sheet1');
   if (def && ss.getSheets().length > 1) ss.deleteSheet(def);
+  vapidKeys_();
   installTriggers_();
-  return { ok: true, sheet_url: ss.getUrl(), ntfy_alex: !!P.getProperty('NTFY_ALEX'), ntfy_manon: !!P.getProperty('NTFY_MANON'), ai: !!P.getProperty('ANTHROPIC_KEY') };
+  return { ok: true, sheet_url: ss.getUrl(), vapid: P.getProperty('VAPID_PUB'), ai: !!P.getProperty('ANTHROPIC_KEY') };
 }
 function book_() {
   const id = P.getProperty('SHEET_ID');
@@ -68,15 +93,14 @@ function book_() {
 function sheet_(ss) {
   ss = ss || book_();
   let sh = ss.getSheetByName(TAB);
-  if (!sh) { sh = ss.insertSheet(TAB); sh.getRange(1, 1, 1, HDR.length).setValues([HDR]).setFontWeight('bold'); sh.setFrozenRows(1); }
+  if (!sh) { sh = ss.insertSheet(TAB); sh.getRange(1, 1, 1, HDR.length).setValues([HDR]).setFontWeight('bold'); sh.setFrozenRows(1); P.setProperty('HDR_V', '2'); }
+  if (P.getProperty('HDR_V') !== '2') { sh.getRange(1, 1, 1, HDR.length).setValues([HDR]).setFontWeight('bold'); P.setProperty('HDR_V', '2'); }
   return sh;
 }
+// Pas de rappel automatique d'attention (principe de l'appli) : seules les lettres et capsules qui s'ouvrent préviennent, à 9 h.
 function installTriggers_() {
   ScriptApp.getProjectTriggers().forEach(t => ScriptApp.deleteTrigger(t));
-  ScriptApp.newTrigger('notifMorning').timeBased().atHour(9).nearMinute(0).everyDays(1).inTimezone(TZ).create();
-  ScriptApp.newTrigger('notifDue').timeBased().everyHours(1).create();
-  ScriptApp.newTrigger('notifMonday').timeBased().onWeekDay(ScriptApp.WeekDay.MONDAY).atHour(9).nearMinute(30).inTimezone(TZ).create();
-  ScriptApp.newTrigger('notifSunday').timeBased().onWeekDay(ScriptApp.WeekDay.SUNDAY).atHour(19).nearMinute(0).inTimezone(TZ).create();
+  ScriptApp.newTrigger('notifDue').timeBased().atHour(9).nearMinute(0).everyDays(1).inTimezone(TZ).create();
 }
 
 // ---------- stockage ----------
@@ -86,124 +110,217 @@ function readAll_() {
   if (last < 2) return { rows: [], index: {} };
   const vals = sh.getRange(2, 1, last - 1, HDR.length).getValues();
   const index = {};
-  vals.forEach((r, i) => { if (r[0]) index[String(r[0])] = { row: i + 2, updated: Number(r[3]) || 0 }; });
+  vals.forEach((r, i) => { if (r[0]) index[String(r[0])] = { row: i + 2, i, updated: Number(r[3]) || 0 }; });
   return { rows: vals, index };
 }
+function rowItem_(r) { try { const o = JSON.parse(r[5]); if (r[4] === true || r[4] === 'TRUE') o.del = true; return o; } catch (e) { return null; } }
+// since = horodatage serveur (colonne srv) : un élément arrivé en retard (réseau capricieux) n'est jamais sauté par l'autre téléphone.
 function all_(since) {
   const { rows } = readAll_();
   const items = [];
   rows.forEach(r => {
     if (!r[0]) return;
-    if (since && Number(r[3]) <= since) return;
-    try { const o = JSON.parse(r[5]); if (r[4] === true || r[4] === 'TRUE') o.del = true; items.push(o); } catch (e) {}
+    if (since && (Number(r[6]) || Number(r[3]) || 0) <= since) return;
+    const o = rowItem_(r); if (o) items.push(o);
   });
   return { ok: true, items, now: Date.now() };
 }
-function upsert_(items) {
-  if (!items.length) return { ok: true, n: 0 };
-  const lock = LockService.getScriptLock();
-  lock.waitLock(20000);
-  try {
-    const sh = sheet_();
-    const { index } = readAll_();
-    let n = 0;
-    const appends = [];
-    items.forEach(o => {
-      if (!o || !o.id) return;
-      const row = [o.id, o.t || '', o.d || '', Number(o.u) || Date.now(), !!o.del, JSON.stringify(o)];
-      const ex = index[o.id];
-      if (ex) { if (ex.updated > row[3]) return; sh.getRange(ex.row, 1, 1, HDR.length).setValues([row]); }
-      else appends.push(row);
-      n++;
-    });
-    if (appends.length) sh.getRange(sh.getLastRow() + 1, 1, appends.length, HDR.length).setValues(appends);
-    return { ok: true, n, now: Date.now() };
-  } finally { lock.releaseLock(); }
+function upsert_(items, notes) {
+  const newer = [];
+  let n = 0;
+  if (items.length) {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
+    try {
+      const sh = sheet_();
+      const { rows, index } = readAll_();
+      const now = Date.now();
+      const appends = [], appended = {};
+      items.forEach(o => {
+        if (!o || !o.id) return;
+        const row = [o.id, o.t || '', o.d || '', Number(o.u) || now, !!o.del, JSON.stringify(o), now];
+        const ex = index[o.id];
+        if (o.id in appended) { if (appends[appended[o.id]][3] <= row[3]) appends[appended[o.id]] = row; return; }
+        if (ex) {
+          if (ex.updated > row[3]) { const cur = rowItem_(rows[ex.i]); if (cur) newer.push(cur); return; }
+          sh.getRange(ex.row, 1, 1, HDR.length).setValues([row]);
+        } else { appended[o.id] = appends.length; appends.push(row); }
+        n++;
+      });
+      if (appends.length) sh.getRange(sh.getLastRow() + 1, 1, appends.length, HDR.length).setValues(appends);
+      SpreadsheetApp.flush();
+    } finally { lock.releaseLock(); }
+  }
+  let sent = 0;
+  (notes || []).slice(0, 20).forEach(x => { try { sent += notify_(x).sent || 0; } catch (e) { P.setProperty('LAST_PUSH_ERR', 'note ' + String(e && e.message || e)); } });
+  return { ok: true, n, now: Date.now(), newer, sent };
 }
 function itemsOf_(type) {
   const { rows } = readAll_();
   const res = [];
-  rows.forEach(r => { if (r[1] !== type || (r[4] === true || r[4] === 'TRUE')) return; try { res.push(JSON.parse(r[5])); } catch (e) {} });
+  rows.forEach(r => { if (r[1] !== type || (r[4] === true || r[4] === 'TRUE')) return; const o = rowItem_(r); if (o) res.push(o); });
   return res;
 }
-function saveItem_(o) { o.u = Date.now(); upsert_([o]); }
+function saveItem_(o) { o.u = Date.now(); upsert_([o], []); }
 
 // ---------- photos ----------
+function folder_() {
+  const id = P.getProperty('FOLDER_ID');
+  if (id) { try { return DriveApp.getFolderById(id); } catch (e) {} }
+  const it = DriveApp.getFoldersByName('Nous');
+  const f = it.hasNext() ? it.next() : DriveApp.createFolder('Nous');
+  P.setProperty('FOLDER_ID', f.getId());
+  return f;
+}
+const safeId_ = s => String(s || '').replace(/[^A-Za-z0-9_-]/g, '').slice(0, 64);
+const photoUrl_ = f => 'https://lh3.googleusercontent.com/d/' + f.getId() + '=w1400';
+function photoPart_(p) {
+  const pid = safeId_(p.pid), i = Number(p.i), data = String(p.data || '');
+  if (!pid || !(i >= 0 && i < 400) || !data || data.length > 95000) return { ok: false, error: 'morceau invalide' };
+  CacheService.getScriptCache().put('ph:' + pid + ':' + i, data, 21600);
+  return { ok: true, i };
+}
+function photoFind_(pid) {
+  pid = safeId_(pid);
+  if (!pid) return { ok: false, error: 'pid' };
+  const c = CacheService.getScriptCache().get('phd:' + pid);
+  if (c) return { ok: true, url: c };
+  const it = folder_().searchFiles("title contains '" + pid + "'");
+  while (it.hasNext()) { const f = it.next(); if (f.getName().indexOf(pid) === 0) return { ok: true, url: photoUrl_(f) }; }
+  return { ok: false, error: 'absente' };
+}
+function photoDone_(p) {
+  const pid = safeId_(p.pid), n = Number(p.n);
+  if (!pid || !(n >= 1 && n <= 400)) return { ok: false, error: 'photo invalide' };
+  const cache = CacheService.getScriptCache();
+  const known = cache.get('phd:' + pid);
+  if (known) return { ok: true, url: known };
+  const lock = LockService.getScriptLock();
+  lock.waitLock(25000);
+  try {
+    const found = photoFind_(pid);
+    if (found.ok) return found;
+    const keys = [];
+    for (let i = 0; i < n; i++) keys.push('ph:' + pid + ':' + i);
+    const got = {};
+    for (let i = 0; i < keys.length; i += 100) Object.assign(got, cache.getAll(keys.slice(i, i + 100)));
+    const missing = [];
+    keys.forEach((k, i) => { if (got[k] == null) missing.push(i); });
+    if (missing.length) return { ok: false, missing };
+    const mime = /^image\/[\w.+-]+$/.test(String(p.mime || '')) ? p.mime : 'image/jpeg';
+    const ext = { 'image/jpeg': '.jpg', 'image/png': '.png', 'image/heic': '.heic', 'image/heif': '.heif', 'image/webp': '.webp' }[mime] || '';
+    const f = folder_().createFile(Utilities.newBlob(Utilities.base64Decode(keys.map(k => got[k]).join('')), mime, pid + ext));
+    f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
+    const url = photoUrl_(f);
+    cache.put('phd:' + pid, url, 21600);
+    try { cache.removeAll(keys); } catch (e) {}
+    return { ok: true, url };
+  } finally { lock.releaseLock(); }
+}
 function photo_(p) {
-  const folders = DriveApp.getFoldersByName('Nous');
-  const folder = folders.hasNext() ? folders.next() : DriveApp.createFolder('Nous');
   const blob = Utilities.newBlob(Utilities.base64Decode(p.data), p.mime || 'image/jpeg', p.name || ('photo-' + Date.now() + '.jpg'));
-  const f = folder.createFile(blob);
+  const f = folder_().createFile(blob);
   f.setSharing(DriveApp.Access.ANYONE_WITH_LINK, DriveApp.Permission.VIEW);
-  return { ok: true, url: 'https://lh3.googleusercontent.com/d/' + f.getId() + '=w1400', id: f.getId() };
+  return { ok: true, url: photoUrl_(f), id: f.getId() };
 }
 
-// ---------- ntfy ----------
-function topic_(u) { return P.getProperty(u === 'alex' ? 'NTFY_ALEX' : 'NTFY_MANON'); }
-function ntfy_(topic, msg, title, tags, prio) {
-  if (!topic) return false;
-  const headers = { 'Title': title || 'Nous', 'Priority': String(prio || 3) };
-  if (tags) headers['Tags'] = tags;
-  const app = P.getProperty('APP_URL');
-  if (app) headers['Click'] = app;
-  for (let i = 0; i < 3; i++) {
+// ---------- notifications (Web Push, voir Push.js) ----------
+function vapidKeys_() {
+  let d = P.getProperty('VAPID_D'), pub = P.getProperty('VAPID_PUB');
+  if (!d || !pub) {
+    const lock = LockService.getScriptLock();
+    lock.waitLock(20000);
     try {
-      const r = UrlFetchApp.fetch('https://ntfy.sh/' + topic, { method: 'post', payload: msg, headers, muteHttpExceptions: true });
-      if (r.getResponseCode() < 300) return true;
-      P.setProperty('LAST_NTFY_ERR', r.getResponseCode() + ' ' + r.getContentText().slice(0, 200));
-    } catch (e) { P.setProperty('LAST_NTFY_ERR', String(e && e.message || e)); }
-    Utilities.sleep(400);
+      d = P.getProperty('VAPID_D'); pub = P.getProperty('VAPID_PUB');
+      if (!d || !pub) { const kp = ecKeyPair_(); d = kp.d.toString(16); pub = b64u_(kp.pub); P.setProperties({ VAPID_D: d, VAPID_PUB: pub }); }
+    } finally { lock.releaseLock(); }
   }
-  return false;
+  return { d: BigInt('0x' + d), pub: b64uDec_(pub) };
 }
-function notifyTo_(to, title, msg, tags, prio) {
-  const list = to === 'both' ? ['alex', 'manon'] : [to];
-  let ok = false;
-  list.forEach(u => { if (ntfy_(topic_(u), msg, title, tags, prio)) ok = true; });
+function pushSubs_() { try { return JSON.parse(P.getProperty('PUSH_SUBS') || '{}'); } catch (e) { return {}; } }
+function pushStatus_() {
+  const s = pushSubs_(), subs = {};
+  PEOPLE.forEach(u => { subs[u] = (s[u] || []).length; });
+  return { ok: true, vapid: P.getProperty('VAPID_PUB') || b64u_(vapidKeys_().pub), subs };
+}
+const PUSH_HOSTS = /^https:\/\/([a-z0-9-]+\.)*(push\.apple\.com|googleapis\.com|push\.services\.mozilla\.com|notify\.windows\.com)\//;
+function pushSub_(p) {
+  const s = p.sub || {}, k = s.keys || {};
+  if (PUSH_USERS.indexOf(p.user) < 0 || !PUSH_HOSTS.test(String(s.endpoint || ''))) return { ok: false, error: 'abonnement invalide' };
+  if (b64uDec_(k.p256dh || '').length !== 65 || b64uDec_(k.auth || '').length !== 16) return { ok: false, error: 'clés invalides' };
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const all = pushSubs_();
+    PUSH_USERS.forEach(u => { all[u] = (all[u] || []).filter(x => x.e !== s.endpoint); });
+    all[p.user] = all[p.user].concat([{ e: s.endpoint, k: k.p256dh, a: k.auth, d: String(p.dev || '').slice(0, 30), t: Date.now() }]).slice(-4);
+    P.setProperty('PUSH_SUBS', JSON.stringify(all));
+    return { ok: true, n: all[p.user].length };
+  } finally { lock.releaseLock(); }
+}
+function pushUnsub_(endpoint) {
+  const lock = LockService.getScriptLock();
+  lock.waitLock(20000);
+  try {
+    const all = pushSubs_();
+    let n = 0;
+    PUSH_USERS.forEach(u => { const before = (all[u] || []).length; all[u] = (all[u] || []).filter(x => [].concat(endpoint).indexOf(x.e) < 0); n += before - all[u].length; });
+    P.setProperty('PUSH_SUBS', JSON.stringify(all));
+    return { ok: true, removed: n };
+  } finally { lock.releaseLock(); }
+}
+// Envoie une notif sur tous les téléphones de `user`. Renvoie le nombre de téléphones atteints.
+function pushTo_(user, payload) {
+  const subs = pushSubs_()[user] || [];
+  if (!subs.length) return 0;
+  const keys = vapidKeys_(), contact = P.getProperty('APP_URL') || APP_URL_DEF;
+  let res;
+  try { res = UrlFetchApp.fetchAll(subs.map(s => webPushRequest_(s, payload, keys, contact))); }
+  catch (e) { P.setProperty('LAST_PUSH_ERR', new Date().toISOString() + ' ' + user + ' ' + String(e && e.message || e)); return 0; }
+  let ok = 0;
+  const dead = [];
+  res.forEach((r, i) => {
+    const code = r.getResponseCode();
+    if (code < 300) { ok++; return; }
+    if (code === 404 || code === 410) dead.push(subs[i].e);
+    P.setProperty('LAST_PUSH_ERR', new Date().toISOString() + ' ' + user + ' ' + subs[i].e.slice(8, 40) + ' ' + code + ' ' + r.getContentText().slice(0, 200));
+  });
+  if (dead.length) pushUnsub_(dead);
   return ok;
 }
-
-// ---------- rappels ----------
-function today_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'); }
-function dayIndex_(s) { return Math.round((new Date(s + 'T12:00:00') - new Date('2026-01-01T12:00:00')) / 864e5); }
-function shuffle_(arr, seed) { const a = arr.slice(); let s = seed || 1; for (let i = a.length - 1; i > 0; i--) { s = (s * 9301 + 49297) % 233280; const j = Math.floor(s / 233280 * (i + 1)); [a[i], a[j]] = [a[j], a[i]]; } return a; }
-function monday_(s) { const d = new Date(s + 'T12:00:00'); const dow = (d.getDay() + 6) % 7; d.setDate(d.getDate() - dow); return Utilities.formatDate(d, TZ, 'yyyy-MM-dd'); }
-function daysBetween_(a, b) { return Math.round((new Date(b + 'T12:00:00') - new Date(a + 'T12:00:00')) / 864e5); }
-function fmt_(s) { const d = new Date(s + 'T12:00:00'); const M = ['janv.', 'févr.', 'mars', 'avr.', 'mai', 'juin', 'juil.', 'août', 'sept.', 'oct.', 'nov.', 'déc.']; return d.getDate() + ' ' + M[d.getMonth()]; }
-function name_(u) { const p = itemsOf_('profile').find(x => x.id === 'profile-' + u); return (p && p.name) || (u === 'alex' ? 'Alex' : 'Manon'); }
-
-function notifMorning() {
-  const d = today_();
-  const q = shuffle_(QUESTIONS, 7)[((dayIndex_(d) % QUESTIONS.length) + QUESTIONS.length) % QUESTIONS.length];
-  const meet = itemsOf_('meet').filter(m => !m.done && m.d >= d).sort((a, b) => a.d.localeCompare(b.d))[0];
-  const cd = meet ? (daysBetween_(d, meet.d) === 0 ? "C'est aujourd'hui qu'on se retrouve 🎉\n\n" : 'J-' + daysBetween_(d, meet.d) + ' avant de se retrouver 💛\n\n') : '';
-  notifyTo_('both', 'Question du jour 💬', cd + q, 'speech_balloon');
+function notify_(p) {
+  const to = p.to === 'both' ? PEOPLE : [p.to];
+  if (p.nid) {
+    const c = CacheService.getScriptCache(), k = 'nid:' + safeId_(p.nid);
+    if (c.get(k)) return { ok: true, dup: true, sent: 0 };
+    c.put(k, '1', 21600);
+  }
+  const payload = { title: String(p.title || 'Nous').slice(0, 120), body: String(p.msg || '').slice(0, 500), kind: safeId_(p.kind).slice(0, 20), from: safeId_(p.from).slice(0, 10) };
+  let sent = 0;
+  to.forEach(u => { if (PUSH_USERS.indexOf(u) >= 0) sent += pushTo_(u, payload); });
+  return { ok: true, sent };
 }
+
+// ---------- lettres et capsules qui s'ouvrent ----------
+function today_() { return Utilities.formatDate(new Date(), TZ, 'yyyy-MM-dd'); }
+function name_(u) { const p = itemsOf_('profile').find(x => x.id === 'profile-' + u); return (p && p.name) || (u === 'alex' ? 'Alex' : 'Manon'); }
 function notifDue() {
   const d = today_();
   itemsOf_('letter').forEach(l => {
     if (l.notified || l.open > d) return;
-    ntfy_(topic_(l.to), 'Une lettre de ' + name_(l.from) + " s'ouvre aujourd'hui. Elle t'attend dans Nous.", 'Lettre 💌', 'love_letter', 4);
+    pushTo_(l.to, { title: 'Lettre 💌', body: 'Une lettre de ' + name_(l.from) + " s'ouvre aujourd'hui. Elle t'attend dans Nous.", kind: 'letter' });
     l.notified = true; saveItem_(l);
   });
   itemsOf_('capsule').forEach(c => {
     if (c.notified || c.open > d) return;
-    notifyTo_('both', 'Capsule ouverte ⏳', 'La capsule « ' + c.title + " » s'ouvre aujourd'hui !", 'hourglass', 4);
+    PEOPLE.forEach(u => pushTo_(u, { title: 'Capsule ouverte ⏳', body: 'La capsule « ' + c.title + " » s'ouvre aujourd'hui !", kind: 'capsule' }));
     c.notified = true; saveItem_(c);
   });
 }
-function notifMonday() {
-  const wk = monday_(today_());
-  const custom = itemsOf_('defiCustom').find(x => x.id === 'defiCustom-' + wk);
-  const txt = custom ? custom.txt : shuffle_(DEFIS, 5)[((dayIndex_(wk) / 7) | 0) % DEFIS.length];
-  const qs = shuffle_(QUIZ.map((q, i) => i), dayIndex_(wk) + 3).slice(0, 5);
-  notifyTo_('both', 'Nouvelle semaine 🏁', 'Défi de la semaine : ' + txt + '\n\nEt un nouveau quiz de 5 questions vous attend 🧠', 'checkered_flag');
-}
-function notifSunday() {
-  const wk = monday_(today_());
-  const done = itemsOf_('checkin').filter(c => c.id.indexOf('checkin-' + wk) === 0).map(c => c.by);
-  ['alex', 'manon'].forEach(u => { if (done.indexOf(u) < 0) ntfy_(topic_(u), 'Check-in de la semaine : 5 questions, une note, et on se le dit en appel.', 'Dimanche soir 🗓️', 'calendar'); });
-}
+// Anciens rappels automatiques retirés (l'appli ne dicte rien). Gardés vides au cas où un ancien déclencheur traîne.
+function notifMorning() {}
+function notifMonday() {}
+function notifSunday() {}
 
 // ---------- Complice (API Claude) ----------
 function ai_(p) {

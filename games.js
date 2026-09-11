@@ -53,13 +53,13 @@ function renderQuiz(b) {
     const self = qs.map((_, i) => val(b, `[data-self="${i}"]`)), guess = qs.map((_, i) => val(b, `[data-guess="${i}"]`));
     if (self.some(x => !x) || guess.some(x => !x)) return toast('Remplis tout 🙂');
     put({ id: 'quizA-' + wk + '-' + ME, t: 'quizA', by: ME, self, guess, d: today() });
-    notify(YOU(), 'Quiz de la semaine 🧠', you ? myName() + ' a joué : venez valider les devinettes !' : myName() + ' a répondu au quiz. À toi de jouer !', 'brain');
+    notify(YOU(), 'Quiz de la semaine 🧠', you ? myName() + ' a joué : venez valider les devinettes !' : myName() + ' a répondu au quiz. À toi de jouer !', 'quiz');
     renderGameBody(); toast(you ? 'À vous de valider !' : 'Envoyé, on attend ' + yourName());
   };
   b.querySelectorAll('[data-v]').forEach(x => x.onclick = () => {
     const v = quizV(wk, ME) || { id: 'quizV-' + wk + '-' + ME, t: 'quizV', by: ME, verdicts: [] };
     v.verdicts[+x.dataset.v] = x.dataset.val === '1'; put(v);
-    if (v.verdicts.filter(z => z != null).length === qs.length) notify(YOU(), 'Score du quiz 🏆', myName() + ' a validé : tu as ' + v.verdicts.filter(z => z).length + '/5 bonnes devinettes.', 'trophy');
+    if (v.verdicts.filter(z => z != null).length === qs.length) notify(YOU(), 'Score du quiz 🏆', myName() + ' a validé : tu as ' + v.verdicts.filter(z => z).length + '/5 bonnes devinettes.', 'quiz');
     renderGameBody();
   });
 }
@@ -78,12 +78,16 @@ function renderDefi(b) {
     ${you ? `<div class="card"><div class="card-h"><h2>${esc(yourName())} l'a fait aussi</h2></div>${you.note ? `<div>${nl(you.note)}</div>` : ''}${you.url ? `<img src="${esc(you.url)}" style="width:100%;border-radius:12px;margin-top:8px" alt="">` : ''}</div>` : ''}
     <div class="row mt2"><button class="btn wide" data-custom>Proposer un autre défi cette semaine</button></div>
     ${hist.length ? `<div class="sec"><h2>Défis passés</h2></div><div class="card" style="padding:6px 16px">${hist.map(w => { const dd = weekDefi(w); const a = get('defiDone-' + w + '-alex'), m = get('defiDone-' + w + '-manon'); return `<div class="li"><div class="grow"><div class="t">${esc(dd.txt)}</div><div class="m">${fmtDate(w)} · ${a ? '✓ ' + nameOf('alex') : ''} ${m ? '✓ ' + nameOf('manon') : ''}</div></div></div>`; }).join('')}</div>` : ''}`;
-  let url = null;
-  const ph = b.querySelector('[data-photo]'); if (ph) ph.onclick = () => pickPhoto(async f => { b.querySelector('[data-pstat]').textContent = 'Envoi…'; try { url = await uploadPhoto(f); b.querySelector('[data-pstat]').textContent = 'Photo prête ✓'; } catch (e) { b.querySelector('[data-pstat]').textContent = 'Échec : ' + e.message; } });
-  const dn = b.querySelector('[data-done]'); if (dn) dn.onclick = () => { put({ id: 'defiDone-' + wk + '-' + ME, t: 'defiDone', by: ME, note: val(b, '[data-note]'), url, d: today() }); notify(YOU(), 'Défi relevé 🏁', myName() + ' a relevé le défi de la semaine !', 'checkered_flag'); burst(); renderGameBody(); };
+  const ph = b.querySelector('[data-photo]') ? photoInline(b.querySelector('[data-photo]'), b.querySelector('[data-pstat]')) : null;
+  const dn = b.querySelector('[data-done]'); if (dn) dn.onclick = async () => {
+    const note = val(b, '[data-note]');
+    let url = null;
+    if (ph && ph.has()) { dn.disabled = true; dn.textContent = 'Envoi de la photo…'; try { url = await ph.url(); } catch (e) { dn.disabled = false; dn.textContent = 'Défi relevé ✓'; return toast('La photo n\'est pas partie, retouche pour réessayer'); } }
+    put({ id: 'defiDone-' + wk + '-' + ME, t: 'defiDone', by: ME, note, url, d: today() }); notify(YOU(), 'Défi relevé 🏁', myName() + ' a relevé le défi de la semaine !', 'defi'); burst(); renderGameBody();
+  };
   b.querySelector('[data-custom]').onclick = () => {
     const sh = openSheet('Défi maison', `<label class="f">Le défi</label><textarea class="in" data-txt placeholder="Quelque chose de fun et faisable à distance"></textarea><div class="muted small mt">Il remplace le défi de cette semaine pour vous deux.</div><button class="btn p wide mt2" data-ok>Lancer le défi</button>`);
-    sh.querySelector('[data-ok]').onclick = () => { const txt = val(sh, '[data-txt]'); if (!txt) return; put({ id: 'defiCustom-' + wk, t: 'defiCustom', txt, by: ME }); notify(YOU(), 'Nouveau défi 🏁', myName() + ' lance un défi : ' + txt, 'checkered_flag'); sh.close(); renderGameBody(); };
+    sh.querySelector('[data-ok]').onclick = () => { const txt = val(sh, '[data-txt]'); if (!txt) return; put({ id: 'defiCustom-' + wk, t: 'defiCustom', txt, by: ME }); notify(YOU(), 'Nouveau défi 🏁', myName() + ' lance un défi : ' + txt, 'defi'); sh.close(); renderGameBody(); };
   };
 }
 
@@ -109,10 +113,10 @@ function renderGuess(b) {
     const sugg = shuffle(DEEP, Date.now() % 1000).slice(0, 4);
     const sh = openSheet('Devine ma réponse', `<label class="f">La question</label><textarea class="in" data-q placeholder="Une question sur toi"></textarea><div class="muted small mt">Idées :</div>${sugg.map(s => `<button type="button" class="chip mt" data-s="${esc(s)}" style="white-space:normal;text-align:left">${esc(s)}</button>`).join('')}<label class="f">Ma réponse (cachée jusqu'à sa devinette)</label><textarea class="in" data-a></textarea><button class="btn p wide mt2" data-ok>Envoyer</button>`);
     sh.querySelectorAll('[data-s]').forEach(x => x.onclick = () => sh.querySelector('[data-q]').value = x.dataset.s);
-    sh.querySelector('[data-ok]').onclick = () => { const q = val(sh, '[data-q]'), a = val(sh, '[data-a]'); if (!q || !a) return toast('Question et réponse'); put({ id: uid('guess'), t: 'guess', q, a, by: ME, d: today() }); notify(YOU(), 'Devine ma réponse 🎯', myName() + ' : « ' + q + ' ». Devine sa réponse !', 'dart'); sh.close(); renderGameBody(); };
+    sh.querySelector('[data-ok]').onclick = () => { const q = val(sh, '[data-q]'), a = val(sh, '[data-a]'); if (!q || !a) return toast('Question et réponse'); put({ id: uid('guess'), t: 'guess', q, a, by: ME, d: today() }); notify(YOU(), 'Devine ma réponse 🎯', myName() + ' : « ' + q + ' ». Devine sa réponse !', 'guess'); sh.close(); renderGameBody(); };
   };
-  b.querySelectorAll('[data-gsend]').forEach(x => x.onclick = () => { const id = x.dataset.gsend; const g = val(b, `[data-gtxt="${id}"]`); if (!g) return; put({ id: 'guessG-' + id.slice(6), t: 'guessG', by: ME, g, d: today() }); notify(YOU(), 'Devinette 🎯', myName() + ' a deviné ta réponse. Verdict ?', 'dart'); renderGameBody(); });
-  b.querySelectorAll('[data-gv]').forEach(x => x.onclick = () => { const g = get(x.dataset.gv); g.v = x.dataset.val === '1'; put(g); notify(YOU(), 'Verdict 🎯', g.v ? myName() + ' : bien vu, tu avais deviné ! 🎉' : myName() + ' : raté… on en parle ?', g.v ? 'tada' : 'thinking_face'); renderGameBody(); });
+  b.querySelectorAll('[data-gsend]').forEach(x => x.onclick = () => { const id = x.dataset.gsend; const g = val(b, `[data-gtxt="${id}"]`); if (!g) return; put({ id: 'guessG-' + id.slice(6), t: 'guessG', by: ME, g, d: today() }); notify(YOU(), 'Devinette 🎯', myName() + ' a deviné ta réponse. Verdict ?', 'guess'); renderGameBody(); });
+  b.querySelectorAll('[data-gv]').forEach(x => x.onclick = () => { const g = get(x.dataset.gv); g.v = x.dataset.val === '1'; put(g); notify(YOU(), 'Verdict 🎯', g.v ? myName() + ' : bien vu, tu avais deviné ! 🎉' : myName() + ' : raté… on en parle ?', 'guess'); renderGameBody(); });
 }
 
 // ---------- roue de la vie ----------
@@ -131,7 +135,7 @@ function renderWheel(b) {
     const cur = (me && me.scores) || {};
     const sh = openSheet('Ma roue de la vie', ROUE.map(k => `<label class="f">${k}</label>${scaleHtml('w-' + k, 10, cur[k] || null)}`).join('') + `<button class="btn p wide mt2" data-ok>Enregistrer</button>`);
     wireSegs(sh);
-    sh.querySelector('[data-ok]').onclick = () => { const scores = {}; ROUE.forEach(k => scores[k] = segVal(sh, 'w-' + k) || 5); put({ id: 'wheel-' + mk + '-' + ME, t: 'wheel', by: ME, scores, d: today() }); notify(YOU(), 'Roue de la vie 🎡', myName() + ' a rempli sa roue du mois. À toi, et on compare.', 'ferris_wheel'); sh.close(); renderGameBody(); };
+    sh.querySelector('[data-ok]').onclick = () => { const scores = {}; ROUE.forEach(k => scores[k] = segVal(sh, 'w-' + k) || 5); put({ id: 'wheel-' + mk + '-' + ME, t: 'wheel', by: ME, scores, d: today() }); notify(YOU(), 'Roue de la vie 🎡', myName() + ' a rempli sa roue du mois. À toi, et on compare.', 'wheel'); sh.close(); renderGameBody(); };
   };
   const f = b.querySelector('[data-fill]'); if (f) f.onclick = fill;
   const e = b.querySelector('[data-edit]'); if (e) e.onclick = fill;
@@ -162,12 +166,17 @@ function renderLife(b) {
   const edit = id => {
     const c = (id && get(id)) || { id: uid('life'), t: 'life', by: ME, title: '', txt: '', age: '', year: '', url: null };
     const sh = openSheet('Un épisode', `<label class="f">Titre</label><input class="in" data-title value="${esc(c.title)}" placeholder="Le déménagement, mon premier job…"><div class="grid2"><div><label class="f">Âge</label><input class="in" type="number" data-age value="${esc(c.age)}"></div><div><label class="f">Année</label><input class="in" type="number" data-year value="${esc(c.year || '')}"></div></div><label class="f">Raconte</label><textarea class="in" data-txt style="min-height:120px">${esc(c.txt)}</textarea><div class="row mt"><button class="btn" data-photo>📷 Photo</button><span class="small muted" data-pstat>${c.url ? 'Photo ✓' : ''}</span></div><div class="row mt2">${id ? '<button class="btn danger" data-del>Supprimer</button>' : ''}<button class="btn p grow" data-ok>Enregistrer</button></div>`);
-    sh.querySelector('[data-photo]').onclick = () => pickPhoto(async f => { sh.querySelector('[data-pstat]').textContent = 'Envoi…'; try { c.url = await uploadPhoto(f); sh.querySelector('[data-pstat]').textContent = 'Photo ✓'; } catch (e) { sh.querySelector('[data-pstat]').textContent = 'Échec'; } });
-    sh.querySelector('[data-ok]').onclick = () => { c.title = val(sh, '[data-title]'); c.txt = val(sh, '[data-txt]'); c.age = val(sh, '[data-age]'); c.year = val(sh, '[data-year]'); if (!c.title && !c.txt) return; const isNew = !get(c.id); put(c); if (isNew) notify(YOU(), 'Ligne de vie 📖', myName() + ' a écrit un épisode : ' + (c.title || '…'), 'book'); sh.close(); renderGameBody(); };
+    const ph = photoInline(sh.querySelector('[data-photo]'), sh.querySelector('[data-pstat]'));
+    const okb = sh.querySelector('[data-ok]');
+    okb.onclick = async () => {
+      c.title = val(sh, '[data-title]'); c.txt = val(sh, '[data-txt]'); c.age = val(sh, '[data-age]'); c.year = val(sh, '[data-year]'); if (!c.title && !c.txt) return;
+      if (ph.has()) { okb.disabled = true; okb.textContent = 'Envoi de la photo…'; try { c.url = await ph.url(); } catch (e) { okb.disabled = false; okb.textContent = 'Enregistrer'; return toast('La photo n\'est pas partie, retouche pour réessayer'); } }
+      const isNew = !get(c.id); put(c); if (isNew) notify(YOU(), 'Ligne de vie 📖', myName() + ' a écrit un épisode : ' + (c.title || '…'), 'life'); sh.close(); renderGameBody();
+    };
     const del = sh.querySelector('[data-del]'); if (del) del.onclick = () => { remove(c.id); sh.close(); renderGameBody(); };
   };
   const nw = b.querySelector('[data-new]'); if (nw) nw.onclick = () => edit(null);
   b.querySelectorAll('[data-edit]').forEach(x => x.onclick = () => edit(x.dataset.edit));
-  b.querySelectorAll('[data-qok]').forEach(x => x.onclick = () => { const q = val(b, `[data-q="${x.dataset.qok}"]`); if (!q) return; put({ id: uid('lifeQ'), t: 'lifeQ', chapter: x.dataset.qok, by: ME, q, a: '' }); notify(YOU(), 'Ligne de vie 📖', myName() + ' te pose une question sur un épisode : ' + q, 'book'); renderGameBody(); });
-  b.querySelectorAll('[data-ansok]').forEach(x => x.onclick = () => { const a = val(b, `[data-ans="${x.dataset.ansok}"]`); if (!a) return; const q = get(x.dataset.ansok); q.a = a; put(q); notify(YOU(), 'Ligne de vie 📖', myName() + ' a répondu à ta question.', 'book'); renderGameBody(); });
+  b.querySelectorAll('[data-qok]').forEach(x => x.onclick = () => { const q = val(b, `[data-q="${x.dataset.qok}"]`); if (!q) return; put({ id: uid('lifeQ'), t: 'lifeQ', chapter: x.dataset.qok, by: ME, q, a: '' }); notify(YOU(), 'Ligne de vie 📖', myName() + ' te pose une question sur un épisode : ' + q, 'life'); renderGameBody(); });
+  b.querySelectorAll('[data-ansok]').forEach(x => x.onclick = () => { const a = val(b, `[data-ans="${x.dataset.ansok}"]`); if (!a) return; const q = get(x.dataset.ansok); q.a = a; put(q); notify(YOU(), 'Ligne de vie 📖', myName() + ' a répondu à ta question.', 'life'); renderGameBody(); });
 }
