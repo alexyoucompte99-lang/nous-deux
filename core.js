@@ -80,7 +80,7 @@ let pulling = false;
 async function pull(full) {
   if (!navigator.onLine || pulling || BRIDGE.url.startsWith('__')) return;
   pulling = true; setSync('busy');
-  for (let i = 0; i < 2; i++) {
+  for (let i = 0; i < 3; i++) { // la réponse de Google se perd assez souvent : on réessaie tout de suite
     const ctl = new AbortController(), to = setTimeout(() => ctl.abort(), 40000);
     try {
       const r = await fetch(BRIDGE.url + '?key=' + encodeURIComponent(BRIDGE.key) + '&what=all&since=' + (full ? 0 : Math.max(0, DB.lastSync - 60000)), { cache: 'no-store', signal: ctl.signal });
@@ -95,7 +95,7 @@ async function pull(full) {
       if (changed) { render(); document.dispatchEvent(new CustomEvent('nous:changed')); }
       if (DB.outbox.length || DB.notes.length) flush();
       break;
-    } catch (e) { setSync('err'); if (!i) await sleep(1500); }
+    } catch (e) { setSync('err'); if (i < 2) await sleep(1200 + i * 1500); }
     finally { clearTimeout(to); }
   }
   pulling = false;
